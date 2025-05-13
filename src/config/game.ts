@@ -6,7 +6,7 @@ export const MONSTER_SIZE = 20;
 export const MONSTER_SPEED = 1.5; // pixels per frame update for monsters
 export const MONSTER_SHOOT_INTERVAL_BASE = 3000; // ms
 export const MONSTER_SHOOT_INTERVAL_RANDOM = 2000; // ms (total interval = base + Math.random() * random)
-export const MAX_MONSTERS = 8; // Increased for larger world
+export const MAX_MONSTERS = 25; // Increased for larger world, as per request
 export const MONSTER_SPAWN_INTERVAL = 4000; // ms, how often to try spawning a new monster
 
 export const PROJECTILE_SIZE = 8; // Monster projectile size
@@ -45,3 +45,4 @@ export const KEY_BINDINGS = {
   A: 'a',
   D: 'd',
 };
+
