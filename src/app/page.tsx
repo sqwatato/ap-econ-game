@@ -141,32 +141,34 @@ export default function EcoRoamPage() {
   }, [gameStatus, playerState.x, playerState.y, monsters, spawnMonster]); // Added monsters & spawnMonster to dep array
 
 
-  const handleProjectileHit = async (projectile: ProjectileInstance) => {
-    setGameStatus('question');
-    try {
-      let questionData: BaseQuestionOutput;
-      if (projectile.monsterType === MonsterType.TRIVIA) {
-        // For simplicity, using a fixed topic. In a real game, this could be dynamic.
-        const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation"];
-        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-        questionData = await generateEconomicsQuestion({ topic: randomTopic });
-      } else {
-        const conditions = ["recessionary gap", "inflationary gap"];
-        const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
-        questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
+  const handleProjectileHit = (projectile: ProjectileInstance) => {
+    // Defer state updates to prevent "Cannot update a component while rendering another" error.
+    // The main logic, including async calls, is now inside the setTimeout callback.
+    setTimeout(async () => {
+      setGameStatus('question'); 
+      try {
+        let questionData: BaseQuestionOutput;
+        if (projectile.monsterType === MonsterType.TRIVIA) {
+          const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation"];
+          const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+          questionData = await generateEconomicsQuestion({ topic: randomTopic });
+        } else {
+          const conditions = ["recessionary gap", "inflationary gap"];
+          const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+          questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
+        }
+        setCurrentQuestionContext({
+          monsterId: projectile.monsterId,
+          projectileId: projectile.id,
+          questionData,
+          monsterType: projectile.monsterType,
+        });
+      } catch (error) {
+        console.error("Error generating question:", error);
+        setGameStatus('game_over'); 
+        setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error", correctAnswerText: "N/A"} });
       }
-      setCurrentQuestionContext({
-        monsterId: projectile.monsterId,
-        projectileId: projectile.id,
-        questionData,
-        monsterType: projectile.monsterType,
-      });
-    } catch (error) {
-      console.error("Error generating question:", error);
-      // Fallback: if AI fails, maybe end game or ask a default question
-      setGameStatus('game_over'); // Or handle error more gracefully
-      setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error", correctAnswerText: "N/A"} });
-    }
+    }, 0);
   };
 
   const handleAnswer = (isCorrect: boolean) => {
