@@ -27,6 +27,9 @@ import { cn } from '@/lib/utils';
 
 type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over';
 
+const MAX_QUESTION_QUEUE_SIZE = 5;
+const MIN_QUESTION_QUEUE_SIZE = 2;
+
 export default function EcoRoamPage() {
   const [playerState, setPlayerState] = useState<PlayerState>({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
   const [monsters, setMonsters] = useState<MonsterInstance[]>([]);
@@ -39,10 +42,76 @@ export default function EcoRoamPage() {
   const [currentQuestionContext, setCurrentQuestionContext] = useState<CurrentQuestionContext | null>(null);
   const [gameOverData, setGameOverData] = useState<GameOverData | null>(null);
   const [isPlayerHit, setIsPlayerHit] = useState(false);
+
+  const [triviaQuestionQueue, setTriviaQuestionQueue] = useState<BaseQuestionOutput[]>([]);
+  const [causeEffectQuestionQueue, setCauseEffectQuestionQueue] = useState<BaseQuestionOutput[]>([]);
+  const [isFetchingTrivia, setIsFetchingTrivia] = useState(false);
+  const [isFetchingCauseEffect, setIsFetchingCauseEffect] = useState(false);
   
   const pressedKeys = useRef<Set<string>>(new Set());
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastMonsterSpawnTime = useRef<number>(0);
+
+  const fetchTriviaQuestions = useCallback(async (count: number) => {
+    if (isFetchingTrivia) return;
+    setIsFetchingTrivia(true);
+    try {
+      const promises = [];
+      const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
+      for (let i = 0; i < count; i++) {
+        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+        promises.push(generateEconomicsQuestion({ topic: randomTopic }));
+      }
+      const results = await Promise.allSettled(promises);
+      const newQuestions = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
+      setTriviaQuestionQueue(prev => [...prev, ...newQuestions].slice(-MAX_QUESTION_QUEUE_SIZE)); // Keep only the newest if over limit
+    } catch (error) {
+      console.error("Error fetching trivia questions:", error);
+    } finally {
+      setIsFetchingTrivia(false);
+    }
+  }, [isFetchingTrivia]);
+
+  const fetchCauseEffectQuestions = useCallback(async (count: number) => {
+    if (isFetchingCauseEffect) return;
+    setIsFetchingCauseEffect(true);
+    try {
+      const promises = [];
+      const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
+      for (let i = 0; i < count; i++) {
+        const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+        promises.push(generateCauseEffectQuestion({ economicCondition: randomCondition }));
+      }
+      const results = await Promise.allSettled(promises);
+      const newQuestions = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
+      setCauseEffectQuestionQueue(prev => [...prev, ...newQuestions].slice(-MAX_QUESTION_QUEUE_SIZE)); // Keep only the newest
+    } catch (error) {
+      console.error("Error fetching cause-effect questions:", error);
+    } finally {
+      setIsFetchingCauseEffect(false);
+    }
+  }, [isFetchingCauseEffect]);
+
+  useEffect(() => {
+    if (gameStatus === 'playing' || gameStatus === 'start_screen') { // Fetch even on start screen to prepare
+      if (triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
+        fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length);
+      }
+    }
+  }, [triviaQuestionQueue.length, isFetchingTrivia, gameStatus, fetchTriviaQuestions]);
+
+  useEffect(() => {
+    if (gameStatus === 'playing' || gameStatus === 'start_screen') { // Fetch even on start screen to prepare
+      if (causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
+        fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length);
+      }
+    }
+  }, [causeEffectQuestionQueue.length, isFetchingCauseEffect, gameStatus, fetchCauseEffectQuestions]);
+
 
   const resetGameState = useCallback(() => {
     setPlayerState({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
@@ -57,11 +126,24 @@ export default function EcoRoamPage() {
     setIsPlayerHit(false);
     pressedKeys.current.clear();
     lastMonsterSpawnTime.current = Date.now();
+    
+    setTriviaQuestionQueue([]);
+    setCauseEffectQuestionQueue([]);
+    setIsFetchingTrivia(false); 
+    setIsFetchingCauseEffect(false);
+
     setTimeout(() => spawnMonster(MAX_MONSTERS / 2 > 1 ? MAX_MONSTERS / 2 : 2), 100); 
-  }, []);
+  }, []); // spawnMonster is stable due to its own useCallback
 
   const startGame = () => {
     resetGameState();
+    // Initial fetch to ensure queues are populated
+    if (triviaQuestionQueue.length < MAX_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
+      fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length);
+    }
+    if (causeEffectQuestionQueue.length < MAX_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
+      fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length);
+    }
     setGameStatus('playing');
   };
 
@@ -181,7 +263,6 @@ export default function EcoRoamPage() {
               hit = true;
               hitMonsterIds.add(monster.id);
               setScore(prev => prev + 20);
-              // setMonstersKilled(prev => prev + 1); // Moved to ensure killed only once
               break; 
             }
           }
@@ -214,36 +295,66 @@ export default function EcoRoamPage() {
   }, [gameStatus, playerState.x, playerState.y, monsters, projectiles, playerProjectiles, spawnMonster]);
 
 
-  const handleProjectileHit = (projectile: ProjectileInstance) => {
+  const handleProjectileHit = async (projectile: ProjectileInstance) => {
     setIsPlayerHit(true);
-    setTimeout(() => setIsPlayerHit(false), 300); // Flash for 0.3 seconds
+    setTimeout(() => setIsPlayerHit(false), 300);
 
-    // Delay showing question to allow hit effect to be visible
     setTimeout(async () => {
-      setGameStatus('question'); 
-      try {
-        let questionData: BaseQuestionOutput;
-        if (projectile.monsterType === MonsterType.TRIVIA) {
-          const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
-          const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-          questionData = await generateEconomicsQuestion({ topic: randomTopic });
-        } else {
-          const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
-          const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
-          questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
+      setGameStatus('question');
+      let questionData: BaseQuestionOutput | undefined;
+      let queueUsed = false;
+
+      if (projectile.monsterType === MonsterType.TRIVIA) {
+        if (triviaQuestionQueue.length > 0) {
+          const [nextQuestion, ...rest] = triviaQuestionQueue;
+          questionData = nextQuestion;
+          setTriviaQuestionQueue(rest);
+          queueUsed = true;
         }
+      } else { // MonsterType.CAUSE_EFFECT
+        if (causeEffectQuestionQueue.length > 0) {
+          const [nextQuestion, ...rest] = causeEffectQuestionQueue;
+          questionData = nextQuestion;
+          setCauseEffectQuestionQueue(rest);
+          queueUsed = true;
+        }
+      }
+
+      // Refill logic is handled by useEffect hooks watching queue lengths
+
+      if (!questionData) { // Fallback: fetch on demand
+        console.warn(`Queue empty for ${projectile.monsterType}, fetching on demand.`);
+        try {
+          if (projectile.monsterType === MonsterType.TRIVIA) {
+            const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
+            const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+            questionData = await generateEconomicsQuestion({ topic: randomTopic });
+          } else { // MonsterType.CAUSE_EFFECT
+            const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
+            const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+            questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
+          }
+        } catch (error) {
+          console.error("Error generating question on demand:", error);
+          setGameStatus('game_over');
+          setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
+          return; 
+        }
+      }
+      
+      if (questionData) {
         setCurrentQuestionContext({
           monsterId: projectile.monsterId,
           projectileId: projectile.id,
           questionData,
           monsterType: projectile.monsterType,
         });
-      } catch (error) {
-        console.error("Error generating question:", error);
-        setGameStatus('game_over'); 
-        setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
+      } else {
+        console.error("Failed to obtain a question for the player.");
+        setGameStatus('game_over');
+        setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
       }
-    }, 100); // Short delay for question modal
+    }, 100);
   };
 
   const handleAnswer = (isCorrect: boolean) => {
@@ -320,7 +431,7 @@ export default function EcoRoamPage() {
   }, []);
   
   useEffect(() => {
-    if (gameStatus === 'playing' && monsters.length === 0 && MAX_MONSTERS > 0) { // Ensure MAX_MONSTERS > 0 to prevent infinite loop if set to 0
+    if (gameStatus === 'playing' && monsters.length === 0 && MAX_MONSTERS > 0) {
        setTimeout(() => spawnMonster(Math.min(MAX_MONSTERS, MAX_MONSTERS / 2 > 1 ? Math.floor(MAX_MONSTERS / 2) : 2)), 100);
        lastMonsterSpawnTime.current = Date.now();
     }
@@ -364,7 +475,7 @@ export default function EcoRoamPage() {
         {isPlayerHit && (
           <div 
             className="absolute inset-0 bg-destructive/40 pointer-events-none"
-            style={{ zIndex: 5 }} // Ensure it's above background, below player
+            style={{ zIndex: 5 }} 
           ></div>
         )}
         <div
