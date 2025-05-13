@@ -27,8 +27,8 @@ import { cn } from '@/lib/utils';
 
 type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over';
 
-const MAX_QUESTION_QUEUE_SIZE = 2; // Target size for question queues
-const MIN_QUESTION_QUEUE_SIZE = 2; // Fetch if queue length < this value
+const MAX_QUESTION_QUEUE_SIZE = 2;
+const MIN_QUESTION_QUEUE_SIZE = 1; // Fetch if queue length < this value. Adjusted to 1 to ensure quicker refill.
 
 export default function EcoRoamPage() {
   const [playerState, setPlayerState] = useState<PlayerState>({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
@@ -51,7 +51,7 @@ export default function EcoRoamPage() {
   const pressedKeys = useRef<Set<string>>(new Set());
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastMonsterSpawnTime = useRef<number>(0);
-  const isProcessingHit = useRef<boolean>(false); // Ref to prevent concurrent hit processing
+  const isProcessingHit = useRef<boolean>(false);
 
   const spawnMonster = useCallback((count = 1) => {
     setMonsters(prevMonsters => {
@@ -60,8 +60,9 @@ export default function EcoRoamPage() {
         if (prevMonsters.length + newMonsters.length >= MAX_MONSTERS) break;
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
         const spawnPadding = MONSTER_SIZE * 2;
-        const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE * 2 - spawnPadding * 2) + spawnPadding;
-        const y = Math.random() * (WORLD_HEIGHT * 0.7 - MONSTER_SIZE - spawnPadding * 2) + spawnPadding; // Spawn in upper 70%
+        // Ensure monsters spawn within world boundaries, avoiding edges.
+        const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+        const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding; 
         newMonsters.push({ 
           id: `m-${Date.now()}-${Math.random()}`, 
           type, x, y, 
@@ -87,7 +88,11 @@ export default function EcoRoamPage() {
       const newQuestions = results
         .filter(r => r.status === 'fulfilled')
         .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
-      setTriviaQuestionQueue(prev => [...prev, ...newQuestions].slice(-MAX_QUESTION_QUEUE_SIZE)); 
+      
+      setTriviaQuestionQueue(prev => {
+        const combined = [...prev, ...newQuestions];
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE);
+      });
     } catch (error) {
       console.error("Error fetching trivia questions:", error);
     } finally {
@@ -109,7 +114,11 @@ export default function EcoRoamPage() {
       const newQuestions = results
         .filter(r => r.status === 'fulfilled')
         .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
-      setCauseEffectQuestionQueue(prev => [...prev, ...newQuestions].slice(-MAX_QUESTION_QUEUE_SIZE)); 
+      
+      setCauseEffectQuestionQueue(prev => {
+        const combined = [...prev, ...newQuestions];
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE);
+      });
     } catch (error) {
       console.error("Error fetching cause-effect questions:", error);
     } finally {
@@ -137,8 +146,13 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false); 
     setIsFetchingCauseEffect(false);
 
-    setTimeout(() => spawnMonster(MAX_MONSTERS / 2 > 1 ? Math.floor(MAX_MONSTERS / 2) : 2), 100); 
-  }, [spawnMonster]);
+    // Initial fill of question queues
+    fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
+    fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
+    
+    setTimeout(() => spawnMonster(Math.floor(MAX_MONSTERS / 2) || 1), 100);
+  }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions]);
+
 
   const handleProjectileHit = useCallback(async (projectile: ProjectileInstance) => {
     if (isProcessingHit.current || gameStatus === 'question' || gameStatus === 'game_over') {
@@ -155,26 +169,24 @@ export default function EcoRoamPage() {
     const monsterType = projectile.monsterType;
     
     if (monsterType === MonsterType.TRIVIA) {
-      if (triviaQuestionQueue.length > 0) {
-        const [nextQuestion, ...rest] = triviaQuestionQueue;
-        questionData = nextQuestion;
-        setTriviaQuestionQueue(rest);
-        if (rest.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
-          const numToFetch = MAX_QUESTION_QUEUE_SIZE - rest.length;
-          if (numToFetch > 0) fetchTriviaQuestions(numToFetch);
-        }
+      questionData = triviaQuestionQueue[0];
+      if (questionData) {
+        setTriviaQuestionQueue(prev => prev.slice(1));
       }
     } else { 
-      if (causeEffectQuestionQueue.length > 0) {
-        const [nextQuestion, ...rest] = causeEffectQuestionQueue;
-        questionData = nextQuestion;
-        setCauseEffectQuestionQueue(rest);
-        if (rest.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
-          const numToFetch = MAX_QUESTION_QUEUE_SIZE - rest.length;
-          if (numToFetch > 0) fetchCauseEffectQuestions(numToFetch);
-        }
+      questionData = causeEffectQuestionQueue[0];
+      if (questionData) {
+        setCauseEffectQuestionQueue(prev => prev.slice(1));
       }
     }
+    
+    // Fetch replacement questions immediately after one is used.
+    if (monsterType === MonsterType.TRIVIA && triviaQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
+        fetchTriviaQuestions(1);
+    } else if (monsterType === MonsterType.CAUSE_EFFECT && causeEffectQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
+        fetchCauseEffectQuestions(1);
+    }
+
 
     if (!questionData) {
       console.warn(`Queue empty for ${monsterType}, fetching on demand.`);
@@ -192,7 +204,6 @@ export default function EcoRoamPage() {
         console.error("Error generating question on demand:", error);
         setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
         setGameStatus('game_over'); 
-        // isProcessingHit.current will be reset by useEffect on gameStatus change
         return; 
       }
     }
@@ -204,16 +215,13 @@ export default function EcoRoamPage() {
         questionData,
         monsterType: projectile.monsterType,
       });
-      // isProcessingHit.current remains true until gameStatus changes from 'question'
     } else {
       console.error("Failed to obtain a question for the player.");
       setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
       setGameStatus('game_over');
-      // isProcessingHit.current will be reset by useEffect on gameStatus change
     }
-  }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingCauseEffect, isFetchingTrivia]);
+  }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
-  // Effect to reset isProcessingHit ref when game is not in question mode
   useEffect(() => {
     if (gameStatus !== 'question') {
       isProcessingHit.current = false;
@@ -221,36 +229,26 @@ export default function EcoRoamPage() {
   }, [gameStatus]);
 
   const startGame = () => {
-    resetGameState();
-    // Initial fill of question queues
-    if (triviaQuestionQueue.length < MAX_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
-      fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length);
-    }
-    if (causeEffectQuestionQueue.length < MAX_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
-      fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length);
-    }
+    resetGameState(); // resetGameState now also handles initial queue filling
     setGameStatus('playing');
   };
 
   // Effect for maintaining trivia question queue
   useEffect(() => {
-    if (gameStatus === 'playing' || gameStatus === 'start_screen') { 
-      if (triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
+    if ((gameStatus === 'playing' || gameStatus === 'start_screen') && triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
         const numToFetch = MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length;
         if (numToFetch > 0) fetchTriviaQuestions(numToFetch);
-      }
     }
   }, [triviaQuestionQueue.length, isFetchingTrivia, gameStatus, fetchTriviaQuestions]);
 
   // Effect for maintaining cause-effect question queue
   useEffect(() => {
-    if (gameStatus === 'playing' || gameStatus === 'start_screen') { 
-      if (causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
+    if ((gameStatus === 'playing' || gameStatus === 'start_screen') && causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
          const numToFetch = MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length;
          if (numToFetch > 0) fetchCauseEffectQuestions(numToFetch);
-      }
     }
   }, [causeEffectQuestionQueue.length, isFetchingCauseEffect, gameStatus, fetchCauseEffectQuestions]);
+
 
   // Game Loop
   useEffect(() => {
@@ -274,7 +272,7 @@ export default function EcoRoamPage() {
 
       setMonsters(prevMonsters => prevMonsters.map(monster => {
         const angleToPlayer = Math.atan2(playerState.y - monster.y, playerState.x - monster.x);
-        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3);
+        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); // Random up to 30 degrees deviation
         const moveAngle = angleToPlayer + randomAngleOffset;
         
         let newMonsterX = monster.x + Math.cos(moveAngle) * MONSTER_SPEED;
@@ -384,15 +382,17 @@ export default function EcoRoamPage() {
     if (!currentQuestionContext) return;
 
     if (isCorrect) {
-      const monsterStillExists = monsters.some(m => m.id === currentQuestionContext.monsterId);
-      if (monsterStillExists) {
-         setMonsters(prev => prev.filter(m => m.id !== currentQuestionContext.monsterId));
-         setMonstersKilled(prev => prev + 1);
-      }
+      setMonsters(prev => {
+        const monsterExists = prev.some(m => m.id === currentQuestionContext.monsterId);
+        if (monsterExists) {
+            setMonstersKilled(killed => killed + 1);
+            return prev.filter(m => m.id !== currentQuestionContext.monsterId);
+        }
+        return prev;
+      });
       setScore(prev => prev + 50); 
       setCurrentQuestionContext(null);
       setGameStatus('playing');
-      // isProcessingHit.current will be reset by useEffect on gameStatus change
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
@@ -401,7 +401,6 @@ export default function EcoRoamPage() {
         failedQuestion: { questionText: qData.question, correctAnswerText, explanationText: qData.explanation }
       });
       setGameStatus('game_over');
-      // isProcessingHit.current will be reset by useEffect on gameStatus change
     }
   };
 
@@ -457,7 +456,7 @@ export default function EcoRoamPage() {
   
   useEffect(() => {
     if (gameStatus === 'playing' && monsters.length === 0 && MAX_MONSTERS > 0) {
-       setTimeout(() => spawnMonster(Math.min(MAX_MONSTERS, MAX_MONSTERS / 2 > 1 ? Math.floor(MAX_MONSTERS / 2) : 2)), 100);
+       setTimeout(() => spawnMonster(Math.min(MAX_MONSTERS, Math.floor(MAX_MONSTERS / 2) || 1 )), 100);
        lastMonsterSpawnTime.current = Date.now();
     }
   }, [gameStatus, monsters.length, spawnMonster]);
@@ -469,6 +468,8 @@ export default function EcoRoamPage() {
     backgroundPositionX: `${worldOffsetX % 32}px`, 
     backgroundPositionY: `${worldOffsetY % 32}px`,
   };
+
+  const boundaryThickness = 4; // px
 
 
   if (gameStatus === 'start_screen') {
@@ -512,6 +513,28 @@ export default function EcoRoamPage() {
             height: `${WORLD_HEIGHT}px`,
           }}
         >
+          {/* World Boundaries */}
+          <div
+            className="absolute bg-border/50"
+            style={{ left: 0, top: 0, width: WORLD_WIDTH, height: boundaryThickness }}
+            aria-label="Top Boundary"
+          />
+          <div
+            className="absolute bg-border/50"
+            style={{ left: 0, top: WORLD_HEIGHT - boundaryThickness, width: WORLD_WIDTH, height: boundaryThickness }}
+            aria-label="Bottom Boundary"
+          />
+          <div
+            className="absolute bg-border/50"
+            style={{ left: 0, top: 0, width: boundaryThickness, height: WORLD_HEIGHT }}
+            aria-label="Left Boundary"
+          />
+          <div
+            className="absolute bg-border/50"
+            style={{ left: WORLD_WIDTH - boundaryThickness, top: 0, width: boundaryThickness, height: WORLD_HEIGHT }}
+            aria-label="Right Boundary"
+          />
+
           {monsters.map(monster => (
             <MonsterComponent key={monster.id} monster={monster} />
           ))}
