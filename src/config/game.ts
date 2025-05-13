@@ -3,22 +3,32 @@ export const PLAYER_SIZE = 20;
 export const PLAYER_SPEED = 4; // pixels per frame update
 
 export const MONSTER_SIZE = 20;
+export const MONSTER_SPEED = 1.5; // pixels per frame update for monsters
 export const MONSTER_SHOOT_INTERVAL_BASE = 3000; // ms
 export const MONSTER_SHOOT_INTERVAL_RANDOM = 2000; // ms (total interval = base + Math.random() * random)
-export const MAX_MONSTERS = 5;
-export const MONSTER_SPAWN_INTERVAL = 5000; // ms, how often to try spawning a new monster
+export const MAX_MONSTERS = 8; // Increased for larger world
+export const MONSTER_SPAWN_INTERVAL = 4000; // ms, how often to try spawning a new monster
 
-export const PROJECTILE_SIZE = 8;
-export const PROJECTILE_SPEED = 6; // pixels per frame update
+export const PROJECTILE_SIZE = 8; // Monster projectile size
+export const PROJECTILE_SPEED = 5; // Monster projectile speed
 
-export const GAME_AREA_WIDTH = 800;
-export const GAME_AREA_HEIGHT = 600;
+export const PLAYER_PROJECTILE_SIZE = 6;
+export const PLAYER_PROJECTILE_SPEED = 7;
+
+// Define viewport dimensions (the visible part of the game)
+export const VIEWPORT_WIDTH = 800;
+export const VIEWPORT_HEIGHT = 600;
+
+// Define world dimensions (the total scrollable game area)
+export const WORLD_WIDTH = VIEWPORT_WIDTH * 2; // Example: world is twice the viewport width
+export const WORLD_HEIGHT = VIEWPORT_HEIGHT * 2; // Example: world is twice the viewport height
 
 export const SCORE_INCREMENT_INTERVAL = 1000; // ms
 export const SCORE_INCREMENT_AMOUNT = 10;
 
-export const INITIAL_PLAYER_X = GAME_AREA_WIDTH / 2 - PLAYER_SIZE / 2;
-export const INITIAL_PLAYER_Y = GAME_AREA_HEIGHT - PLAYER_SIZE - 30; // Start at bottom middle
+// Initial player position in world coordinates
+export const INITIAL_PLAYER_X = WORLD_WIDTH / 2 - PLAYER_SIZE / 2;
+export const INITIAL_PLAYER_Y = WORLD_HEIGHT * 0.8 - PLAYER_SIZE / 2; // Start near bottom-center of the world
 
 export enum MonsterType {
   TRIVIA = 'trivia',

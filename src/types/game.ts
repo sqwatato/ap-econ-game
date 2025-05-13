@@ -22,11 +22,16 @@ export interface MonsterInstance extends Position {
   lastShotTime: number;
 }
 
-export interface ProjectileInstance extends Position {
+export interface ProjectileInstance extends Position { // Monster Projectile
   id: string;
   monsterId: string; // To know which monster to remove if question answered correctly
   angle: number; // Radians, for movement
   monsterType: MonsterType; // To fetch correct question type
+}
+
+export interface PlayerProjectileInstance extends Position {
+  id: string;
+  angle: number; // Radians, for movement
 }
 
 export interface CurrentQuestionContext {

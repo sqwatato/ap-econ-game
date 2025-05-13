@@ -24,15 +24,15 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ questionContext, onAnswer
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-2xl shadow-2xl bg-card text-card-foreground">
         <CardHeader>
-          <CardTitle className="text-2xl text-primary">Economic Challenge!</CardTitle>
-          <CardDescription className="text-base">{questionData.question}</CardDescription>
+          <CardTitle className="text-2xl text-primary break-words">Economic Challenge!</CardTitle>
+          <CardDescription className="text-base break-words whitespace-pre-wrap">{questionData.question}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {questionData.choices.map((choice, index) => (
             <Button
               key={index}
               variant="outline"
-              className="w-full text-left justify-start p-4 h-auto text-base hover:bg-accent/20 active:bg-accent/30"
+              className="w-full text-left justify-start p-4 h-auto text-base hover:bg-accent/20 active:bg-accent/30 whitespace-normal break-words"
               onClick={() => handleAnswerClick(index)}
               aria-label={`Answer choice ${index + 1}: ${choice}`}
             >
@@ -42,7 +42,7 @@ const QuestionModal: React.FC<QuestionModalProps> = ({ questionContext, onAnswer
         </CardContent>
         {questionData.explanation && (
            <CardFooter className="text-sm text-muted-foreground">
-             <p><strong>Hint:</strong> {questionData.explanation}</p>
+             <p className="break-words whitespace-pre-wrap"><strong>Hint:</strong> {questionData.explanation}</p>
            </CardFooter>
         )}
       </Card>
