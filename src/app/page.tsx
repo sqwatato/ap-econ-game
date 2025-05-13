@@ -27,8 +27,8 @@ import { cn } from '@/lib/utils';
 
 type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over';
 
-const MAX_QUESTION_QUEUE_SIZE = 5;
-const MIN_QUESTION_QUEUE_SIZE = 2;
+const MAX_QUESTION_QUEUE_SIZE = 2; // Target size for question queues
+const MIN_QUESTION_QUEUE_SIZE = 2; // Fetch if queue length < this value
 
 export default function EcoRoamPage() {
   const [playerState, setPlayerState] = useState<PlayerState>({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
@@ -51,6 +51,7 @@ export default function EcoRoamPage() {
   const pressedKeys = useRef<Set<string>>(new Set());
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastMonsterSpawnTime = useRef<number>(0);
+  const isProcessingHit = useRef<boolean>(false); // Ref to prevent concurrent hit processing
 
   const spawnMonster = useCallback((count = 1) => {
     setMonsters(prevMonsters => {
@@ -70,10 +71,10 @@ export default function EcoRoamPage() {
       }
       return [...prevMonsters, ...newMonsters];
     });
-  }, []); // Removed WORLD_WIDTH, WORLD_HEIGHT, MONSTER_SIZE as they are constants
+  }, []);
 
   const fetchTriviaQuestions = useCallback(async (count: number) => {
-    if (isFetchingTrivia) return;
+    if (isFetchingTrivia || count <= 0) return;
     setIsFetchingTrivia(true);
     try {
       const promises = [];
@@ -95,7 +96,7 @@ export default function EcoRoamPage() {
   }, [isFetchingTrivia]);
 
   const fetchCauseEffectQuestions = useCallback(async (count: number) => {
-    if (isFetchingCauseEffect) return;
+    if (isFetchingCauseEffect || count <= 0) return;
     setIsFetchingCauseEffect(true);
     try {
       const promises = [];
@@ -129,6 +130,7 @@ export default function EcoRoamPage() {
     setIsPlayerHit(false);
     pressedKeys.current.clear();
     lastMonsterSpawnTime.current = Date.now();
+    isProcessingHit.current = false;
     
     setTriviaQuestionQueue([]);
     setCauseEffectQuestionQueue([]);
@@ -139,76 +141,88 @@ export default function EcoRoamPage() {
   }, [spawnMonster]);
 
   const handleProjectileHit = useCallback(async (projectile: ProjectileInstance) => {
-    if (gameStatus === 'question' || gameStatus === 'game_over') {
+    if (isProcessingHit.current || gameStatus === 'question' || gameStatus === 'game_over') {
       return; 
     }
+    isProcessingHit.current = true;
 
     setIsPlayerHit(true);
     setTimeout(() => setIsPlayerHit(false), 300); 
 
     setGameStatus('question'); 
 
-    setTimeout(async () => {
-      let questionData: BaseQuestionOutput | undefined;
-      
-      if (projectile.monsterType === MonsterType.TRIVIA) {
-        if (triviaQuestionQueue.length > 0) {
-          const [nextQuestion, ...rest] = triviaQuestionQueue;
-          questionData = nextQuestion;
-          setTriviaQuestionQueue(rest);
-          if (rest.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
-            fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE - rest.length);
-          }
-        }
-      } else { 
-        if (causeEffectQuestionQueue.length > 0) {
-          const [nextQuestion, ...rest] = causeEffectQuestionQueue;
-          questionData = nextQuestion;
-          setCauseEffectQuestionQueue(rest);
-          if (rest.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
-            fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE - rest.length);
-          }
+    let questionData: BaseQuestionOutput | undefined;
+    const monsterType = projectile.monsterType;
+    
+    if (monsterType === MonsterType.TRIVIA) {
+      if (triviaQuestionQueue.length > 0) {
+        const [nextQuestion, ...rest] = triviaQuestionQueue;
+        questionData = nextQuestion;
+        setTriviaQuestionQueue(rest);
+        if (rest.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
+          const numToFetch = MAX_QUESTION_QUEUE_SIZE - rest.length;
+          if (numToFetch > 0) fetchTriviaQuestions(numToFetch);
         }
       }
+    } else { 
+      if (causeEffectQuestionQueue.length > 0) {
+        const [nextQuestion, ...rest] = causeEffectQuestionQueue;
+        questionData = nextQuestion;
+        setCauseEffectQuestionQueue(rest);
+        if (rest.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
+          const numToFetch = MAX_QUESTION_QUEUE_SIZE - rest.length;
+          if (numToFetch > 0) fetchCauseEffectQuestions(numToFetch);
+        }
+      }
+    }
 
-      if (!questionData) {
-        console.warn(`Queue empty for ${projectile.monsterType}, fetching on demand.`);
-        try {
-          if (projectile.monsterType === MonsterType.TRIVIA) {
-            const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
-            const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-            questionData = await generateEconomicsQuestion({ topic: randomTopic });
-          } else { 
-            const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
-            const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
-            questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
-          }
-        } catch (error) {
-          console.error("Error generating question on demand:", error);
-          setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
-          setGameStatus('game_over'); 
-          return; 
+    if (!questionData) {
+      console.warn(`Queue empty for ${monsterType}, fetching on demand.`);
+      try {
+        if (monsterType === MonsterType.TRIVIA) {
+          const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
+          const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+          questionData = await generateEconomicsQuestion({ topic: randomTopic });
+        } else { 
+          const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
+          const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+          questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
         }
+      } catch (error) {
+        console.error("Error generating question on demand:", error);
+        setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
+        setGameStatus('game_over'); 
+        // isProcessingHit.current will be reset by useEffect on gameStatus change
+        return; 
       }
-      
-      if (questionData) {
-        setCurrentQuestionContext({
-          monsterId: projectile.monsterId,
-          projectileId: projectile.id,
-          questionData,
-          monsterType: projectile.monsterType,
-        });
-      } else {
-        console.error("Failed to obtain a question for the player.");
-        setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
-        setGameStatus('game_over');
-      }
-    }, 100); 
+    }
+    
+    if (questionData) {
+      setCurrentQuestionContext({
+        monsterId: projectile.monsterId,
+        projectileId: projectile.id,
+        questionData,
+        monsterType: projectile.monsterType,
+      });
+      // isProcessingHit.current remains true until gameStatus changes from 'question'
+    } else {
+      console.error("Failed to obtain a question for the player.");
+      setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
+      setGameStatus('game_over');
+      // isProcessingHit.current will be reset by useEffect on gameStatus change
+    }
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingCauseEffect, isFetchingTrivia]);
 
+  // Effect to reset isProcessingHit ref when game is not in question mode
+  useEffect(() => {
+    if (gameStatus !== 'question') {
+      isProcessingHit.current = false;
+    }
+  }, [gameStatus]);
 
   const startGame = () => {
     resetGameState();
+    // Initial fill of question queues
     if (triviaQuestionQueue.length < MAX_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
       fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length);
     }
@@ -218,18 +232,22 @@ export default function EcoRoamPage() {
     setGameStatus('playing');
   };
 
+  // Effect for maintaining trivia question queue
   useEffect(() => {
     if (gameStatus === 'playing' || gameStatus === 'start_screen') { 
       if (triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
-        fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length);
+        const numToFetch = MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length;
+        if (numToFetch > 0) fetchTriviaQuestions(numToFetch);
       }
     }
   }, [triviaQuestionQueue.length, isFetchingTrivia, gameStatus, fetchTriviaQuestions]);
 
+  // Effect for maintaining cause-effect question queue
   useEffect(() => {
     if (gameStatus === 'playing' || gameStatus === 'start_screen') { 
       if (causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
-        fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length);
+         const numToFetch = MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length;
+         if (numToFetch > 0) fetchCauseEffectQuestions(numToFetch);
       }
     }
   }, [causeEffectQuestionQueue.length, isFetchingCauseEffect, gameStatus, fetchCauseEffectQuestions]);
@@ -374,6 +392,7 @@ export default function EcoRoamPage() {
       setScore(prev => prev + 50); 
       setCurrentQuestionContext(null);
       setGameStatus('playing');
+      // isProcessingHit.current will be reset by useEffect on gameStatus change
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
@@ -382,6 +401,7 @@ export default function EcoRoamPage() {
         failedQuestion: { questionText: qData.question, correctAnswerText, explanationText: qData.explanation }
       });
       setGameStatus('game_over');
+      // isProcessingHit.current will be reset by useEffect on gameStatus change
     }
   };
 
