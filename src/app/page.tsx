@@ -10,10 +10,10 @@ import ScoreDisplay from '@/components/game/ScoreDisplay';
 import QuestionModal from '@/components/game/QuestionModal';
 import GameOverScreen from '@/components/game/GameOverScreen';
 import {
-  PLAYER_SIZE, PLAYER_SPEED, MONSTER_SIZE, MONSTER_SPEED, MONSTER_SHOOT_INTERVAL_BASE, MONSTER_SHOOT_INTERVAL_RANDOM,
+  PLAYER_SIZE, PLAYER_SPEED, MONSTER_SIZE, MONSTER_SPEED, MONSTER_SHOOT_INTERVAL_BASE, MONSTER_SHOOT_INTERVAL_RANDOM, MONSTER_CHARGE_DURATION,
   MAX_MONSTERS, MONSTER_SPAWN_INTERVAL, PROJECTILE_SIZE, PROJECTILE_SPEED,
   PLAYER_PROJECTILE_SIZE, PLAYER_PROJECTILE_SPEED,
-  WORLD_WIDTH, WORLD_HEIGHT, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, // Use new dimensions
+  WORLD_WIDTH, WORLD_HEIGHT, VIEWPORT_WIDTH, VIEWPORT_HEIGHT,
   SCORE_INCREMENT_INTERVAL, SCORE_INCREMENT_AMOUNT, INITIAL_PLAYER_X, INITIAL_PLAYER_Y,
   MonsterType, KEY_BINDINGS
 } from '@/config/game';
@@ -23,13 +23,14 @@ import type {
 import { generateEconomicsQuestion } from '@/ai/flows/generate-economics-question';
 import { generateCauseEffectQuestion } from '@/ai/flows/generate-cause-effect-question';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over';
 
 export default function EcoRoamPage() {
   const [playerState, setPlayerState] = useState<PlayerState>({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
   const [monsters, setMonsters] = useState<MonsterInstance[]>([]);
-  const [projectiles, setProjectiles] = useState<ProjectileInstance[]>([]); // Monster projectiles
+  const [projectiles, setProjectiles] = useState<ProjectileInstance[]>([]);
   const [playerProjectiles, setPlayerProjectiles] = useState<PlayerProjectileInstance[]>([]);
   const [score, setScore] = useState(0);
   const [timeSurvived, setTimeSurvived] = useState(0);
@@ -37,6 +38,7 @@ export default function EcoRoamPage() {
   const [gameStatus, setGameStatus] = useState<GameStatus>('start_screen');
   const [currentQuestionContext, setCurrentQuestionContext] = useState<CurrentQuestionContext | null>(null);
   const [gameOverData, setGameOverData] = useState<GameOverData | null>(null);
+  const [isPlayerHit, setIsPlayerHit] = useState(false);
   
   const pressedKeys = useRef<Set<string>>(new Set());
   const gameAreaRef = useRef<HTMLDivElement>(null);
@@ -52,6 +54,7 @@ export default function EcoRoamPage() {
     setMonstersKilled(0);
     setCurrentQuestionContext(null);
     setGameOverData(null);
+    setIsPlayerHit(false);
     pressedKeys.current.clear();
     lastMonsterSpawnTime.current = Date.now();
     setTimeout(() => spawnMonster(MAX_MONSTERS / 2 > 1 ? MAX_MONSTERS / 2 : 2), 100); 
@@ -68,11 +71,15 @@ export default function EcoRoamPage() {
       for (let i = 0; i < count; i++) {
         if (prevMonsters.length + newMonsters.length >= MAX_MONSTERS) break;
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
-        // Spawn monsters within world boundaries, avoid edges if desired
         const spawnPadding = MONSTER_SIZE * 2;
         const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE * 2 - spawnPadding * 2) + spawnPadding;
-        const y = Math.random() * (WORLD_HEIGHT * 0.7 - MONSTER_SIZE - spawnPadding * 2) + spawnPadding; // Spawn in upper 70% of world
-        newMonsters.push({ id: `m-${Date.now()}-${Math.random()}`, type, x, y, lastShotTime: Date.now() });
+        const y = Math.random() * (WORLD_HEIGHT * 0.7 - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+        newMonsters.push({ 
+          id: `m-${Date.now()}-${Math.random()}`, 
+          type, x, y, 
+          nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM + MONSTER_SHOOT_INTERVAL_BASE),
+          isPreparingToShoot: false,
+        });
       }
       return [...prevMonsters, ...newMonsters];
     });
@@ -85,7 +92,6 @@ export default function EcoRoamPage() {
     const gameLoop = requestAnimationFrame(() => {
       const now = Date.now();
 
-      // Player Movement (updates world coordinates)
       setPlayerState(prev => {
         let newX = prev.x;
         let newY = prev.y;
@@ -94,64 +100,60 @@ export default function EcoRoamPage() {
         if (pressedKeys.current.has(KEY_BINDINGS.UP) || pressedKeys.current.has(KEY_BINDINGS.W)) newY -= PLAYER_SPEED;
         if (pressedKeys.current.has(KEY_BINDINGS.DOWN) || pressedKeys.current.has(KEY_BINDINGS.S)) newY += PLAYER_SPEED;
 
-        // Boundary checks against world dimensions
         newX = Math.max(0, Math.min(WORLD_WIDTH - PLAYER_SIZE, newX));
         newY = Math.max(0, Math.min(WORLD_HEIGHT - PLAYER_SIZE, newY));
         return { x: newX, y: newY };
       });
 
-      // Monster Movement & Actions
       setMonsters(prevMonsters => prevMonsters.map(monster => {
-        // Movement: randomly towards player
         const angleToPlayer = Math.atan2(playerState.y - monster.y, playerState.x - monster.x);
-        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); // +/- 30 degrees randomness
+        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3);
         const moveAngle = angleToPlayer + randomAngleOffset;
         
         let newMonsterX = monster.x + Math.cos(moveAngle) * MONSTER_SPEED;
         let newMonsterY = monster.y + Math.sin(moveAngle) * MONSTER_SPEED;
 
-        // World boundary check for monsters
         newMonsterX = Math.max(0, Math.min(WORLD_WIDTH - MONSTER_SIZE, newMonsterX));
         newMonsterY = Math.max(0, Math.min(WORLD_HEIGHT - MONSTER_SIZE, newMonsterY));
         
         let updatedMonster = { ...monster, x: newMonsterX, y: newMonsterY };
 
-        // Shooting
-        if (now - monster.lastShotTime > MONSTER_SHOOT_INTERVAL_BASE + Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) {
-          const projectileAngle = Math.atan2(playerState.y - monster.y, playerState.x - monster.x); // Target player's world coords
+        if (!updatedMonster.isPreparingToShoot && now >= updatedMonster.nextShotDecisionTime - MONSTER_CHARGE_DURATION) {
+            updatedMonster.isPreparingToShoot = true;
+        }
+
+        if (updatedMonster.isPreparingToShoot && now >= updatedMonster.nextShotDecisionTime) {
+          const projectileAngle = Math.atan2(playerState.y - updatedMonster.y, playerState.x - updatedMonster.x);
           setProjectiles(prevProj => [...prevProj, {
             id: `p-${Date.now()}-${Math.random()}`,
-            monsterId: monster.id,
-            monsterType: monster.type,
-            x: monster.x + MONSTER_SIZE / 2, // Start from monster's center (world coords)
-            y: monster.y + MONSTER_SIZE / 2,
+            monsterId: updatedMonster.id,
+            monsterType: updatedMonster.type,
+            x: updatedMonster.x + MONSTER_SIZE / 2,
+            y: updatedMonster.y + MONSTER_SIZE / 2,
             angle: projectileAngle
           }]);
-          updatedMonster.lastShotTime = now;
+          updatedMonster.isPreparingToShoot = false;
+          updatedMonster.nextShotDecisionTime = now + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE;
         }
         return updatedMonster;
       }));
 
-      // Monster Projectile Movement & Collision
       setProjectiles(prevProj => prevProj.filter(p => {
         p.x += PROJECTILE_SPEED * Math.cos(p.angle);
         p.y += PROJECTILE_SPEED * Math.sin(p.angle);
 
-        // Projectile out of world bounds
         if (p.x < 0 || p.x > WORLD_WIDTH || p.y < 0 || p.y > WORLD_HEIGHT) return false;
 
-        // Projectile-Player Collision (Player is at playerState.x, playerState.y in world)
         const dx = p.x - (playerState.x + PLAYER_SIZE / 2);
         const dy = p.y - (playerState.y + PLAYER_SIZE / 2);
         const distance = Math.sqrt(dx * dx + dy * dy);
         if (distance < PROJECTILE_SIZE / 2 + PLAYER_SIZE / 2) {
           handleProjectileHit(p);
-          return false; // Remove projectile
+          return false; 
         }
         return true;
       }));
 
-      // Player Projectile Movement & Collision
       setPlayerProjectiles(prevPlayerProj => {
         const updatedProjectiles = prevPlayerProj.map(p => ({
           ...p,
@@ -163,14 +165,13 @@ export default function EcoRoamPage() {
         const hitMonsterIds = new Set<string>();
 
         for (const p of updatedProjectiles) {
-          // Out of world bounds
           if (p.x < 0 || p.x > WORLD_WIDTH || p.y < 0 || p.y > WORLD_HEIGHT) {
             continue; 
           }
 
           let hit = false;
           for (const monster of monsters) {
-            if (hitMonsterIds.has(monster.id)) continue; // Monster already hit by another projectile this frame
+            if (hitMonsterIds.has(monster.id)) continue; 
 
             const dx = p.x - (monster.x + MONSTER_SIZE / 2);
             const dy = p.y - (monster.y + MONSTER_SIZE / 2);
@@ -179,8 +180,8 @@ export default function EcoRoamPage() {
             if (distance < PLAYER_PROJECTILE_SIZE / 2 + MONSTER_SIZE / 2) {
               hit = true;
               hitMonsterIds.add(monster.id);
-              setScore(prev => prev + 20); // Score for hitting monster
-              setMonstersKilled(prev => prev + 1);
+              setScore(prev => prev + 20);
+              // setMonstersKilled(prev => prev + 1); // Moved to ensure killed only once
               break; 
             }
           }
@@ -188,15 +189,21 @@ export default function EcoRoamPage() {
             remainingProjectiles.push(p);
           }
         }
-        // Remove hit monsters
+        
         if (hitMonsterIds.size > 0) {
-          setMonsters(prev => prev.filter(m => !hitMonsterIds.has(m.id)));
+          setMonsters(prev => {
+            const newMonsters = prev.filter(m => !hitMonsterIds.has(m.id));
+            const killedCount = prev.length - newMonsters.length;
+            if (killedCount > 0) {
+              setMonstersKilled(prevKilled => prevKilled + killedCount);
+            }
+            return newMonsters;
+          });
         }
         return remainingProjectiles;
       });
 
 
-      // Spawn new monsters periodically
       if (now - lastMonsterSpawnTime.current > MONSTER_SPAWN_INTERVAL && monsters.length < MAX_MONSTERS) {
         spawnMonster(1);
         lastMonsterSpawnTime.current = now;
@@ -208,6 +215,10 @@ export default function EcoRoamPage() {
 
 
   const handleProjectileHit = (projectile: ProjectileInstance) => {
+    setIsPlayerHit(true);
+    setTimeout(() => setIsPlayerHit(false), 300); // Flash for 0.3 seconds
+
+    // Delay showing question to allow hit effect to be visible
     setTimeout(async () => {
       setGameStatus('question'); 
       try {
@@ -232,15 +243,18 @@ export default function EcoRoamPage() {
         setGameStatus('game_over'); 
         setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
       }
-    }, 0);
+    }, 100); // Short delay for question modal
   };
 
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
 
     if (isCorrect) {
+      const monsterStillExists = monsters.some(m => m.id === currentQuestionContext.monsterId);
       setMonsters(prev => prev.filter(m => m.id !== currentQuestionContext.monsterId));
-      setMonstersKilled(prev => prev + 1); // Already counted if killed by projectile, but ok for question kill
+      if (monsterStillExists) {
+         setMonstersKilled(prev => prev + 1);
+      }
       setScore(prev => prev + 50); 
       setCurrentQuestionContext(null);
       setGameStatus('playing');
@@ -259,11 +273,9 @@ export default function EcoRoamPage() {
     if (gameStatus !== 'playing' || !gameAreaRef.current) return;
 
     const rect = gameAreaRef.current.getBoundingClientRect();
-    // Click coordinates relative to the viewport
     const clickXInViewport = event.clientX - rect.left;
     const clickYInViewport = event.clientY - rect.top;
 
-    // Player is always at viewport center for aiming purposes
     const playerScreenX = VIEWPORT_WIDTH / 2;
     const playerScreenY = VIEWPORT_HEIGHT / 2;
 
@@ -271,7 +283,7 @@ export default function EcoRoamPage() {
 
     setPlayerProjectiles(prev => [...prev, {
       id: `pp-${Date.now()}-${Math.random()}`,
-      x: playerState.x + PLAYER_SIZE / 2, // Start from player's world center
+      x: playerState.x + PLAYER_SIZE / 2, 
       y: playerState.y + PLAYER_SIZE / 2,
       angle,
     }]);
@@ -308,19 +320,17 @@ export default function EcoRoamPage() {
   }, []);
   
   useEffect(() => {
-    if (gameStatus === 'playing' && monsters.length === 0) {
-       setTimeout(() => spawnMonster(MAX_MONSTERS / 2 > 1 ? MAX_MONSTERS / 2 : 2), 100);
+    if (gameStatus === 'playing' && monsters.length === 0 && MAX_MONSTERS > 0) { // Ensure MAX_MONSTERS > 0 to prevent infinite loop if set to 0
+       setTimeout(() => spawnMonster(Math.min(MAX_MONSTERS, MAX_MONSTERS / 2 > 1 ? Math.floor(MAX_MONSTERS / 2) : 2)), 100);
        lastMonsterSpawnTime.current = Date.now();
     }
   }, [gameStatus, monsters.length, spawnMonster]);
 
-  // Calculate the world container's offset based on player's world position
   const worldOffsetX = VIEWPORT_WIDTH / 2 - playerState.x;
   const worldOffsetY = VIEWPORT_HEIGHT / 2 - playerState.y;
 
-  // Dynamic background position for scrolling effect
   const gameAreaDynamicStyle = {
-    backgroundPositionX: `${worldOffsetX % 32}px`, // 32px is the background-size from globals.css
+    backgroundPositionX: `${worldOffsetX % 32}px`, 
     backgroundPositionY: `${worldOffsetY % 32}px`,
   };
 
@@ -349,9 +359,14 @@ export default function EcoRoamPage() {
           imageRendering: 'pixelated',
           ...gameAreaDynamicStyle 
         }}
-        onClick={handleGameAreaClick} // Player shoots on click
+        onClick={handleGameAreaClick}
       >
-        {/* World Container: monsters and projectiles are positioned within this using their world coordinates */}
+        {isPlayerHit && (
+          <div 
+            className="absolute inset-0 bg-destructive/40 pointer-events-none"
+            style={{ zIndex: 5 }} // Ensure it's above background, below player
+          ></div>
+        )}
         <div
           className="absolute"
           style={{
@@ -372,10 +387,9 @@ export default function EcoRoamPage() {
           ))}
         </div>
 
-        {/* Player is rendered on top, visually fixed in viewport center */}
         <PlayerComponent />
         
-        <ScoreDisplay score={score} timeSurvived={timeSurvived} />
+        <ScoreDisplay score={score} timeSurvived={timeSurvived} monstersKilled={monstersKilled} />
       </div>
 
       {gameStatus === 'question' && currentQuestionContext && (
@@ -390,3 +404,4 @@ export default function EcoRoamPage() {
     </main>
   );
 }
+

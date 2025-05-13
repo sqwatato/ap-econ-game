@@ -19,7 +19,8 @@ export interface PlayerState extends Position {}
 export interface MonsterInstance extends Position {
   id: string;
   type: MonsterType;
-  lastShotTime: number;
+  nextShotDecisionTime: number; // Timestamp when the monster will shoot
+  isPreparingToShoot: boolean; // True if in the "charging up" phase
 }
 
 export interface ProjectileInstance extends Position { // Monster Projectile
@@ -51,3 +52,4 @@ export interface GameOverData {
     explanationText?: string;
   };
 }
+
