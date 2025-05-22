@@ -159,9 +159,8 @@ export default function EcoRoamPage() {
       return; 
     }
     isProcessingHit.current = true;
-
-    setIsPlayerHit(true); // Activate red flash
     setGameStatus('question'); // Change status immediately to pause game loop updates
+    setIsPlayerHit(true); // Activate red flash
 
     // 1-second delay before showing the question modal
     setTimeout(async () => {
@@ -205,6 +204,7 @@ export default function EcoRoamPage() {
           const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
           setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
           setGameStatus('game_over'); 
+          isProcessingHit.current = false; // Ensure this is reset on error
           return; 
         }
       }
@@ -221,18 +221,18 @@ export default function EcoRoamPage() {
         const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
         setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
         setGameStatus('game_over');
+        isProcessingHit.current = false; // Ensure this is reset on error
       }
+      // isProcessingHit will be reset either in handleAnswer or if the component unmounts/status changes
     }, 1000); 
 
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
   useEffect(() => {
-    // This effect ensures isProcessingHit is reset if game status changes externally from the hit process
-    // Also ensures isPlayerHit is false if we directly go to game_over or start_screen without a question.
     if (gameStatus !== 'question') {
       isProcessingHit.current = false;
-      if(gameStatus === 'game_over' || gameStatus === 'start_screen') {
-        setIsPlayerHit(false);
+      if (gameStatus === 'game_over' || gameStatus === 'start_screen') {
+        setIsPlayerHit(false); 
       }
     }
   }, [gameStatus]);
@@ -310,6 +310,7 @@ export default function EcoRoamPage() {
       }));
 
       setProjectiles(prevProj => prevProj.filter(p => {
+        if (!p) return false; // Add a check for undefined projectile
         p.x += PROJECTILE_SPEED * Math.cos(p.angle);
         p.y += PROJECTILE_SPEED * Math.sin(p.angle);
 
@@ -319,7 +320,9 @@ export default function EcoRoamPage() {
         const dy = p.y - (playerState.y + PLAYER_SIZE / 2);
         const distance = Math.sqrt(dx * dx + dy * dy);
         if (distance < PROJECTILE_SIZE / 2 + PLAYER_SIZE / 2) {
-          handleProjectileHit(p); 
+          if (!isProcessingHit.current) { // Ensure hit is processed only once
+            handleProjectileHit(p);
+          }
           return false; 
         }
         return true;
@@ -387,7 +390,8 @@ export default function EcoRoamPage() {
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
 
-    setIsPlayerHit(false); // Ensure flash is off when answer is processed, though it should be off by now
+    setIsPlayerHit(false); 
+    isProcessingHit.current = false; // Reset processing hit flag
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -399,6 +403,7 @@ export default function EcoRoamPage() {
         return prev;
       });
       setScore(prev => prev + 50); 
+      setProjectiles([]); // Clear existing monster projectiles
       setCurrentQuestionContext(null);
       setGameStatus('playing'); // Resume game
     } else {
