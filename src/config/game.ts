@@ -11,10 +11,10 @@ export const MONSTER_SPAWN_INTERVAL = 4000; // ms, how often to try spawning a n
 export const MONSTER_CHARGE_DURATION = 1000; // ms, how long monster charges before shooting
 
 export const PROJECTILE_SIZE = 8; // Monster projectile size
-export const PROJECTILE_SPEED = 5; // Monster projectile speed
+export const PROJECTILE_SPEED = 6; // Monster projectile speed (was 5)
 
 export const PLAYER_PROJECTILE_SIZE = 6;
-export const PLAYER_PROJECTILE_SPEED = 7;
+export const PLAYER_PROJECTILE_SPEED = 8.4; // Player projectile speed (was 7)
 
 // Define viewport dimensions (the visible part of the game)
 export const VIEWPORT_WIDTH = 800;
