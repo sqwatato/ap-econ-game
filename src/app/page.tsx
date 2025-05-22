@@ -269,7 +269,7 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false);
     setIsFetchingCauseEffect(false);
     
-    if (gameStatusRef.current === 'playing' || gameStatus === 'playing') { // Check both ref and current state
+    if (gameStatusRef.current === 'playing' || gameStatus === 'playing') { 
         console.log("[ResetGameState] Game is playing, fetching initial questions.");
         fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
         fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
@@ -306,7 +306,7 @@ export default function EcoRoamPage() {
         body: JSON.stringify({ name, score: currentScore }),
       });
       
-      const responseText = await response.text(); // Read text first to avoid issues with .json() if not JSON
+      const responseText = await response.text(); 
       console.log('[SubmitScore] API Response Status:', response.status);
       console.log('[SubmitScore] API Response Text:', responseText);
 
@@ -331,6 +331,11 @@ export default function EcoRoamPage() {
     if (gameOverData) {
       await submitScoreToLeaderboard(name, gameOverData.score, gameOverData);
     }
+    setGameStatus('game_over');
+  };
+
+  const handleSkipUsernamePrompt = () => {
+    console.log("[HandleSkipUsernamePrompt] User skipped username prompt.");
     setGameStatus('game_over');
   };
 
@@ -365,7 +370,6 @@ export default function EcoRoamPage() {
         }
       }
 
-      // Try to fetch more questions if queue is low
       if (monsterType === MonsterType.TRIVIA && triviaQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
           console.log("[HandleProjectileHit] Trivia queue low, fetching more.");
           fetchTriviaQuestions(1);
@@ -388,7 +392,7 @@ export default function EcoRoamPage() {
         } catch (error) {
           console.error("[HandleProjectileHit] Error generating question on demand:", error);
           handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "AI Error generating question.", correctAnswerText: "N/A"});
-          isProcessingHit.current = false; // Ensure this is reset
+          isProcessingHit.current = false; 
           return;
         }
       }
@@ -414,8 +418,7 @@ export default function EcoRoamPage() {
         console.error("[HandleProjectileHit] Failed to obtain a question for the player.");
         handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "System Error: No question available.", correctAnswerText: "N/A"});
       }
-      // isProcessingHit.current = false; // This should be reset after question is answered or if flow ends early
-    }, 1000); // 1-second delay before showing question modal
+    }, 1000); 
 
   }, [triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
@@ -474,7 +477,7 @@ export default function EcoRoamPage() {
 
       setMonsters(prevMonsters => prevMonsters.map(monster => {
         const angleToPlayer = Math.atan2(playerState.y - monster.y, playerState.x - monster.x);
-        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); // Random movement offset
+        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); 
         const moveAngle = angleToPlayer + randomAngleOffset;
 
         let newMonsterX = monster.x + Math.cos(moveAngle) * MONSTER_SPEED;
@@ -589,9 +592,6 @@ export default function EcoRoamPage() {
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
     console.log(`[HandleAnswer] Answer submitted. Correct: ${isCorrect}`);
-
-    // isProcessingHit.current is reset when gameStatus changes from 'question', or after early exit in handleProjectileHit
-    // setIsPlayerHit(false); // Flash is turned off by handleProjectileHit before modal
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -825,7 +825,11 @@ export default function EcoRoamPage() {
         <QuestionModal questionContext={currentQuestionContext} onAnswer={handleAnswer} />
       )}
       {gameStatus === 'prompting_username' && gameOverData && (
-        <UsernamePromptModal onSubmit={handleUsernameSubmit} currentScore={gameOverData.score} />
+        <UsernamePromptModal 
+            onSubmit={handleUsernameSubmit} 
+            onSkip={handleSkipUsernamePrompt} 
+            currentScore={gameOverData.score} 
+        />
       )}
       {gameStatus === 'game_over' && gameOverData && (
         <GameOverScreen gameOverData={gameOverData} onRestart={startGame} onViewLeaderboard={() => router.push('/leaderboard')} />

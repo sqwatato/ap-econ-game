@@ -6,13 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { X as XIcon } from 'lucide-react'; // Renamed to avoid conflict with React.JSX.Element 'X'
 
 interface UsernamePromptModalProps {
   onSubmit: (name: string) => void;
+  onSkip: () => void; // New prop for skipping
   currentScore: number;
 }
 
-const UsernamePromptModal: React.FC<UsernamePromptModalProps> = ({ onSubmit, currentScore }) => {
+const UsernamePromptModal: React.FC<UsernamePromptModalProps> = ({ onSubmit, onSkip, currentScore }) => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
 
@@ -32,11 +34,20 @@ const UsernamePromptModal: React.FC<UsernamePromptModalProps> = ({ onSubmit, cur
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
-      <Card className="w-full max-w-md shadow-2xl bg-card text-card-foreground">
+      <Card className="w-full max-w-md shadow-2xl bg-card text-card-foreground relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onSkip}
+          className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+          aria-label="Skip submission"
+        >
+          <XIcon className="h-5 w-5" />
+        </Button>
         <form onSubmit={handleSubmit}>
           <CardHeader>
             <CardTitle className="text-2xl text-primary">New High Score!</CardTitle>
-            <CardDescription>Your score of {currentScore} made the leaderboard! Enter your name:</CardDescription>
+            <CardDescription>Your score of {currentScore} made the leaderboard! Enter your name (or skip):</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
