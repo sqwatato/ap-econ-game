@@ -160,6 +160,24 @@ export default function EcoRoamPage() {
   const gameStatusRef = useRef(gameStatus);
 
   useEffect(() => {
+    console.log("--- CURRENT GAME CONFIG VALUES ---");
+    console.log("PLAYER_SPEED:", PLAYER_SPEED);
+    console.log("MONSTER_SPEED:", MONSTER_SPEED);
+    console.log("MONSTER_SHOOT_INTERVAL_BASE:", MONSTER_SHOOT_INTERVAL_BASE);
+    console.log("MONSTER_SHOOT_INTERVAL_RANDOM:", MONSTER_SHOOT_INTERVAL_RANDOM);
+    console.log("MONSTER_CHARGE_DURATION:", MONSTER_CHARGE_DURATION);
+    console.log("MONSTER_PROJECTILE_SPREAD_ANGLE:", MONSTER_PROJECTILE_SPREAD_ANGLE);
+    console.log("MONSTER_SPAWN_CYCLE_INTERVAL:", MONSTER_SPAWN_CYCLE_INTERVAL);
+    console.log("INITIAL_MONSTER_SPAWN_BATCH_SIZE:", INITIAL_MONSTER_SPAWN_BATCH_SIZE);
+    console.log("MONSTER_SPAWN_BATCH_INCREMENT:", MONSTER_SPAWN_BATCH_INCREMENT);
+    console.log("PROJECTILE_SPEED (Monster):", PROJECTILE_SPEED);
+    console.log("PLAYER_PROJECTILE_SPEED:", PLAYER_PROJECTILE_SPEED);
+    console.log("SCORE_INCREMENT_AMOUNT:", SCORE_INCREMENT_AMOUNT);
+    console.log("SCORE_INCREMENT_INTERVAL:", SCORE_INCREMENT_INTERVAL);
+    console.log("--- END GAME CONFIG VALUES ---");
+  }, []);
+
+  useEffect(() => {
     gameStatusRef.current = gameStatus;
   }, [gameStatus]);
 
@@ -233,9 +251,33 @@ export default function EcoRoamPage() {
       const newMonstersList: MonsterInstance[] = [];
       for (let i = 0; i < count; i++) {
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
-        const spawnPadding = MONSTER_SIZE / 2;
-        const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
-        const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+        const spawnPadding = MONSTER_SIZE / 2; // Allows spawning closer to edges
+        let x, y;
+        // Determine spawn edge (0: top, 1: bottom, 2: left, 3: right)
+        const edge = Math.floor(Math.random() * 4);
+        switch (edge) {
+          case 0: // Top edge
+            x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+            y = spawnPadding;
+            break;
+          case 1: // Bottom edge
+            x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+            y = WORLD_HEIGHT - MONSTER_SIZE - spawnPadding;
+            break;
+          case 2: // Left edge
+            x = spawnPadding;
+            y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+            break;
+          case 3: // Right edge
+            x = WORLD_WIDTH - MONSTER_SIZE - spawnPadding;
+            y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+            break;
+          default: // Fallback to random, though should not be reached
+            x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+            y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+            break;
+        }
+
         newMonstersList.push({
           id: `m-${Date.now()}-${Math.random()}`,
           type, x, y,
