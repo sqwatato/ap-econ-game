@@ -31,6 +31,30 @@ type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over';
 const MAX_QUESTION_QUEUE_SIZE = 2;
 const MIN_QUESTION_QUEUE_SIZE = 1; 
 
+const AP_MACRO_TOPICS = [
+  "Basic Economic Concepts (Scarcity, Opportunity Cost, PPC)",
+  "Supply and Demand",
+  "Market Equilibrium",
+  "Elasticity (Price, Income, Cross-Price)",
+  "Market Failures (Externalities, Public Goods)",
+  "Government Intervention (Price Ceilings, Price Floors, Taxes, Subsidies)",
+  "Measuring Economic Performance (GDP, Nominal vs. Real GDP, GDP Deflator)",
+  "Unemployment (Types, Natural Rate)",
+  "Inflation (CPI, Causes, Effects)",
+  "Aggregate Demand (AD)",
+  "Aggregate Supply (AS - Short-run and Long-run)",
+  "Macroeconomic Equilibrium (Short-run and Long-run)",
+  "Fiscal Policy (Expansionary, Contractionary, Multipliers)",
+  "Monetary Policy (Tools of the Fed, Money Market, Loanable Funds Market)",
+  "The Phillips Curve (Short-run and Long-run)",
+  "Money, Banking, and Financial Markets (Definition of Money, Banks, Federal Reserve)",
+  "Economic Growth (Determinants, Productivity)",
+  "International Trade and Finance (Comparative Advantage, Trade Barriers)",
+  "Exchange Rates (Appreciation, Depreciation)",
+  "Balance of Payments (Current Account, Capital and Financial Account)"
+];
+
+
 export default function EcoRoamPage() {
   const [playerState, setPlayerState] = useState<PlayerState>({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
   const [monsters, setMonsters] = useState<MonsterInstance[]>([]);
@@ -60,9 +84,8 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(true);
     try {
       const promises = [];
-      const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
       for (let i = 0; i < count; i++) {
-        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+        const randomTopic = AP_MACRO_TOPICS[Math.floor(Math.random() * AP_MACRO_TOPICS.length)];
         promises.push(generateEconomicsQuestion({ topic: randomTopic }));
       }
       const results = await Promise.allSettled(promises);
@@ -86,7 +109,7 @@ export default function EcoRoamPage() {
     setIsFetchingCauseEffect(true);
     try {
       const promises = [];
-      const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
+      const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation", "cyclical unemployment", "demand-pull inflation", "cost-push inflation"];
       for (let i = 0; i < count; i++) {
         const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
         promises.push(generateCauseEffectQuestion({ economicCondition: randomCondition }));
@@ -159,8 +182,9 @@ export default function EcoRoamPage() {
       return; 
     }
     isProcessingHit.current = true;
-    setGameStatus('question'); // Change status immediately to pause game loop updates
     setIsPlayerHit(true); // Activate red flash
+    setGameStatus('question'); // Change status immediately to pause game loop updates
+
 
     // 1-second delay before showing the question modal
     setTimeout(async () => {
@@ -191,11 +215,10 @@ export default function EcoRoamPage() {
         console.warn(`Queue empty for ${monsterType}, fetching on demand.`);
         try {
           if (monsterType === MonsterType.TRIVIA) {
-            const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
-            const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+            const randomTopic = AP_MACRO_TOPICS[Math.floor(Math.random() * AP_MACRO_TOPICS.length)];
             questionData = await generateEconomicsQuestion({ topic: randomTopic });
           } else { 
-            const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
+            const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation", "cyclical unemployment", "demand-pull inflation", "cost-push inflation"];
             const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
             questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
           }
@@ -231,6 +254,8 @@ export default function EcoRoamPage() {
   useEffect(() => {
     if (gameStatus !== 'question') {
       isProcessingHit.current = false;
+      // Turn off red flash if game transitions to something other than 'question' while hit was processing
+      // or when game over/start screen is active.
       if (gameStatus === 'game_over' || gameStatus === 'start_screen') {
         setIsPlayerHit(false); 
       }
@@ -391,21 +416,33 @@ export default function EcoRoamPage() {
     if (!currentQuestionContext) return;
 
     setIsPlayerHit(false); 
-    isProcessingHit.current = false; // Reset processing hit flag
+    isProcessingHit.current = false; 
 
     if (isCorrect) {
       setMonsters(prev => {
         const monsterExists = prev.some(m => m.id === currentQuestionContext.monsterId);
         if (monsterExists) {
             setMonstersKilled(killed => killed + 1);
-            return prev.filter(m => m.id !== currentQuestionContext.monsterId);
+             // Reset shoot timers for all remaining monsters
+            return prev
+              .filter(m => m.id !== currentQuestionContext.monsterId)
+              .map(monster => ({
+                ...monster,
+                nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
+                isPreparingToShoot: false,
+              }));
         }
-        return prev;
+         // If monster was already killed by player projectile while question was up, just reset other monsters
+        return prev.map(monster => ({
+            ...monster,
+            nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
+            isPreparingToShoot: false,
+        }));
       });
       setScore(prev => prev + 50); 
-      setProjectiles([]); // Clear existing monster projectiles
+      setProjectiles([]); 
       setCurrentQuestionContext(null);
-      setGameStatus('playing'); // Resume game
+      setGameStatus('playing'); 
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
@@ -414,8 +451,8 @@ export default function EcoRoamPage() {
         score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled,
         failedQuestion: { questionText: qData.question, correctAnswerText, explanationText: qData.explanation }
       });
-      setCurrentQuestionContext(null); // Clear question context for game over
-      setGameStatus('game_over'); // Go to game over screen
+      setCurrentQuestionContext(null); 
+      setGameStatus('game_over'); 
     }
   };
 
