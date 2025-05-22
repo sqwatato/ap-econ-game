@@ -1,45 +1,32 @@
 // src/app/api/leaderboard/route.ts
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { kv } from '@vercel/kv';
 import type { LeaderboardEntry } from '@/types/game';
 
-const leaderboardFilePath = path.join(process.cwd(), 'data', 'leaderboard.json');
-const dataDir = path.join(process.cwd(), 'data');
-
-const MAX_LEADERBOARD_ENTRIES = 100; // Keep a reasonable limit
-
-async function ensureDataDirAndFile() {
-  try {
-    await fs.access(dataDir);
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true });
-  }
-  try {
-    await fs.access(leaderboardFilePath);
-  } catch {
-    await fs.writeFile(leaderboardFilePath, JSON.stringify([]), 'utf-8');
-  }
-}
+const LEADERBOARD_KEY = 'leaderboard';
+const MAX_LEADERBOARD_ENTRIES = 100;
 
 async function readLeaderboard(): Promise<LeaderboardEntry[]> {
-  await ensureDataDirAndFile();
   try {
-    const fileContent = await fs.readFile(leaderboardFilePath, 'utf-8');
-    return JSON.parse(fileContent) as LeaderboardEntry[];
+    const leaderboard = await kv.get<LeaderboardEntry[]>(LEADERBOARD_KEY);
+    return leaderboard || [];
   } catch (error) {
-    console.error('Error reading leaderboard file:', error);
-    // If file is corrupted or truly missing after check, return empty
+    console.error('Error reading leaderboard from KV:', error);
     return [];
   }
 }
 
 async function writeLeaderboard(data: LeaderboardEntry[]): Promise<void> {
-  await ensureDataDirAndFile();
   const sortedAndTrimmedData = data
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_LEADERBOARD_ENTRIES);
-  await fs.writeFile(leaderboardFilePath, JSON.stringify(sortedAndTrimmedData, null, 2), 'utf-8');
+  try {
+    await kv.set(LEADERBOARD_KEY, sortedAndTrimmedData);
+  } catch (error) {
+    console.error('Error writing leaderboard to KV:', error);
+    // Depending on the desired behavior, you might want to throw the error
+    // or handle it in a way that informs the user the save might have failed.
+  }
 }
 
 export async function GET() {
@@ -63,7 +50,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ message: 'Name too long (max 20 chars)' }, { status: 400 });
     }
 
-
     const newEntry: LeaderboardEntry = {
       id: Date.now().toString() + Math.random().toString(36).substring(2,7), // Simple unique ID
       name,
@@ -75,7 +61,6 @@ export async function POST(request: Request) {
     leaderboard.push(newEntry);
     await writeLeaderboard(leaderboard);
     
-    // Return the updated leaderboard so client can find rank
     const updatedLeaderboard = await readLeaderboard(); 
     return NextResponse.json(updatedLeaderboard, { status: 201 });
 
