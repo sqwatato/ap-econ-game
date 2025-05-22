@@ -13,7 +13,7 @@ import GameOverScreen from '@/components/game/GameOverScreen';
 import UsernamePromptModal from '@/components/game/UsernamePromptModal';
 import {
   PLAYER_SIZE, PLAYER_SPEED, MONSTER_SIZE, MONSTER_SPEED, MONSTER_SHOOT_INTERVAL_BASE, MONSTER_SHOOT_INTERVAL_RANDOM, MONSTER_CHARGE_DURATION,
-  MAX_MONSTERS, MONSTER_SPAWN_INTERVAL, PROJECTILE_SIZE, PROJECTILE_SPEED, MONSTER_PROJECTILE_SPREAD_ANGLE,
+  MONSTER_SPAWN_INTERVAL, PROJECTILE_SIZE, PROJECTILE_SPEED, MONSTER_PROJECTILE_SPREAD_ANGLE,
   PLAYER_PROJECTILE_SIZE, PLAYER_PROJECTILE_SPEED,
   WORLD_WIDTH, WORLD_HEIGHT, VIEWPORT_WIDTH, VIEWPORT_HEIGHT,
   SCORE_INCREMENT_INTERVAL, SCORE_INCREMENT_AMOUNT, INITIAL_PLAYER_X, INITIAL_PLAYER_Y,
@@ -32,6 +32,7 @@ type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over' | 'promp
 
 const MAX_QUESTION_QUEUE_SIZE = 2;
 const MIN_QUESTION_QUEUE_SIZE = 1;
+const INITIAL_MONSTER_SPAWN_COUNT = 3; // Number of monsters to spawn initially
 
 const AP_MACRO_TOPICS = [
   "Basic Economic Concepts (Scarcity, Opportunity Cost, PPC)",
@@ -229,9 +230,9 @@ export default function EcoRoamPage() {
     setMonsters(prevMonsters => {
       const newMonstersList: MonsterInstance[] = [];
       for (let i = 0; i < count; i++) {
-        if (prevMonsters.length + newMonstersList.length >= MAX_MONSTERS) break;
+        // Removed MAX_MONSTERS check: if (prevMonsters.length + newMonstersList.length >= MAX_MONSTERS) break;
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
-        const spawnPadding = MONSTER_SIZE / 2; // Reduced padding for more spread out spawns
+        const spawnPadding = MONSTER_SIZE / 2;
         const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
         const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
         newMonstersList.push({
@@ -275,7 +276,7 @@ export default function EcoRoamPage() {
         fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     }
 
-    setTimeout(() => spawnMonster(Math.floor(MAX_MONSTERS / 2) || 1), 100);
+    setTimeout(() => spawnMonster(INITIAL_MONSTER_SPAWN_COUNT), 100); // Spawn initial set of monsters
   }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions, gameStatus]);
 
   const handleEndGameFlow = async (finalScore: number, finalTimeSurvived: number, finalMonstersKilled: number, failedQ?: GameOverData['failedQuestion']) => {
@@ -579,7 +580,7 @@ export default function EcoRoamPage() {
       });
 
 
-      if (now - lastMonsterSpawnTime.current > MONSTER_SPAWN_INTERVAL && monsters.length < MAX_MONSTERS) {
+      if (now - lastMonsterSpawnTime.current > MONSTER_SPAWN_INTERVAL) { // Removed monsters.length < MAX_MONSTERS check
         spawnMonster(1);
         lastMonsterSpawnTime.current = now;
       }
@@ -592,6 +593,7 @@ export default function EcoRoamPage() {
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
     console.log(`[HandleAnswer] Answer submitted. Correct: ${isCorrect}`);
+    setIsPlayerHit(false); // Turn off red flash as modal closes
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -711,9 +713,9 @@ export default function EcoRoamPage() {
   }, []); 
 
   useEffect(() => {
-    if (gameStatus === 'playing' && monsters.length === 0 && MAX_MONSTERS > 0) {
+    if (gameStatus === 'playing' && monsters.length === 0) { // Removed MAX_MONSTERS > 0 check
        console.log("[EffectNoMonsters] No monsters on screen, spawning initial set.");
-       setTimeout(() => spawnMonster(Math.min(MAX_MONSTERS, Math.floor(MAX_MONSTERS / 2) || 1 )), 100);
+       setTimeout(() => spawnMonster(INITIAL_MONSTER_SPAWN_COUNT), 100); // Spawn fixed initial count
        lastMonsterSpawnTime.current = Date.now();
     }
   }, [gameStatus, monsters.length, spawnMonster]);
