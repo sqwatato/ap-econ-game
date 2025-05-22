@@ -231,7 +231,7 @@ export default function EcoRoamPage() {
       for (let i = 0; i < count; i++) {
         if (prevMonsters.length + newMonstersList.length >= MAX_MONSTERS) break;
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
-        const spawnPadding = MONSTER_SIZE * 2;
+        const spawnPadding = MONSTER_SIZE / 2; // Reduced padding for more spread out spawns
         const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
         const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
         newMonstersList.push({
@@ -269,14 +269,14 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false);
     setIsFetchingCauseEffect(false);
     
-    if (gameStatusRef.current === 'playing') { 
+    if (gameStatusRef.current === 'playing' || gameStatus === 'playing') { // Check both ref and current state
         console.log("[ResetGameState] Game is playing, fetching initial questions.");
         fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
         fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     }
 
     setTimeout(() => spawnMonster(Math.floor(MAX_MONSTERS / 2) || 1), 100);
-  }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions]);
+  }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions, gameStatus]);
 
   const handleEndGameFlow = async (finalScore: number, finalTimeSurvived: number, finalMonstersKilled: number, failedQ?: GameOverData['failedQuestion']) => {
     console.log(`[HandleEndGameFlow] Score: ${finalScore}, Time: ${finalTimeSurvived}, Killed: ${finalMonstersKilled}`);
@@ -345,7 +345,7 @@ export default function EcoRoamPage() {
     setGameStatus('question'); // Freeze game immediately
 
     setTimeout(async () => {
-      setIsPlayerHit(false); // Turn off red flash before showing modal
+      setIsPlayerHit(false); // Turn off red flash right before showing modal
 
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
@@ -388,7 +388,7 @@ export default function EcoRoamPage() {
         } catch (error) {
           console.error("[HandleProjectileHit] Error generating question on demand:", error);
           handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "AI Error generating question.", correctAnswerText: "N/A"});
-          isProcessingHit.current = false;
+          isProcessingHit.current = false; // Ensure this is reset
           return;
         }
       }
@@ -413,8 +413,8 @@ export default function EcoRoamPage() {
       } else {
         console.error("[HandleProjectileHit] Failed to obtain a question for the player.");
         handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "System Error: No question available.", correctAnswerText: "N/A"});
-        isProcessingHit.current = false;
       }
+      // isProcessingHit.current = false; // This should be reset after question is answered or if flow ends early
     }, 1000); // 1-second delay before showing question modal
 
   }, [triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
@@ -590,8 +590,8 @@ export default function EcoRoamPage() {
     if (!currentQuestionContext) return;
     console.log(`[HandleAnswer] Answer submitted. Correct: ${isCorrect}`);
 
-    isProcessingHit.current = false;
-    setIsPlayerHit(false);
+    // isProcessingHit.current is reset when gameStatus changes from 'question', or after early exit in handleProjectileHit
+    // setIsPlayerHit(false); // Flash is turned off by handleProjectileHit before modal
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -611,7 +611,7 @@ export default function EcoRoamPage() {
       setProjectiles([]); 
       setCurrentQuestionContext(null);
       setGameStatus('playing');
-      console.log("[HandleAnswer] Correct. Resuming game. Monster projectiles cleared.");
+      console.log("[HandleAnswer] Correct. Resuming game. Monster projectiles cleared. Monsters' shot timers reset.");
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
@@ -836,4 +836,3 @@ export default function EcoRoamPage() {
     </main>
   );
 }
-

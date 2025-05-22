@@ -7,12 +7,12 @@ export const MONSTER_SPEED = 1.5; // pixels per frame update for monsters
 export const MONSTER_SHOOT_INTERVAL_BASE = 3000; // ms (min delay: 3 seconds)
 export const MONSTER_SHOOT_INTERVAL_RANDOM = 5000; // ms (max additional delay: 5 seconds, total 3-8 seconds)
 export const MAX_MONSTERS = 25;
-export const MONSTER_SPAWN_INTERVAL = 3200; // ms, how often to try spawning a new monster (was 4000ms)
+export const MONSTER_SPAWN_INTERVAL = 2400; // ms, how often to try spawning a new monster (was 3200ms, now 25% faster)
 export const MONSTER_CHARGE_DURATION = 1000; // ms, how long monster charges before shooting
-export const MONSTER_PROJECTILE_SPREAD_ANGLE = Math.PI / 12; // Max spread of ~15 degrees (PI/12 radians)
+export const MONSTER_PROJECTILE_SPREAD_ANGLE = (Math.PI / 12) * 1.25; // Approx 18.75 degrees (was PI/12, now 25% wider)
 
 export const PROJECTILE_SIZE = 8; // Monster projectile size
-export const PROJECTILE_SPEED = 9; // Monster projectile speed (was 7.2, increased by 25%)
+export const PROJECTILE_SPEED = 8; // Monster projectile speed (was 9)
 
 export const PLAYER_PROJECTILE_SIZE = 6;
 export const PLAYER_PROJECTILE_SPEED = 10.08; // Player projectile speed (was 8.4, increased by 20%)
@@ -47,4 +47,3 @@ export const KEY_BINDINGS = {
   A: 'a',
   D: 'd',
 };
-
