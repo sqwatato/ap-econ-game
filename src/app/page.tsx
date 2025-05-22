@@ -137,7 +137,7 @@ export default function EcoRoamPage() {
     setMonstersKilled(0);
     setCurrentQuestionContext(null);
     setGameOverData(null);
-    setIsPlayerHit(false); // Reset player hit state
+    setIsPlayerHit(false); 
     pressedKeys.current.clear();
     lastMonsterSpawnTime.current = Date.now();
     isProcessingHit.current = false;
@@ -165,6 +165,8 @@ export default function EcoRoamPage() {
 
     // 1-second delay before showing the question modal
     setTimeout(async () => {
+      setIsPlayerHit(false); // Turn off red flash when modal is about to appear
+
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
       
@@ -203,8 +205,6 @@ export default function EcoRoamPage() {
           const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
           setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
           setGameStatus('game_over'); 
-          // isProcessingHit will be reset by useEffect watching gameStatus
-          // setIsPlayerHit will be reset by handleAnswer or resetGameState
           return; 
         }
       }
@@ -216,8 +216,6 @@ export default function EcoRoamPage() {
           questionData,
           monsterType: projectile.monsterType,
         });
-        // Modal will appear. gameStatus is already 'question'.
-        // Red flash (isPlayerHit) remains true.
       } else {
         console.error("Failed to obtain a question for the player.");
         const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
@@ -229,11 +227,10 @@ export default function EcoRoamPage() {
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
   useEffect(() => {
+    // This effect ensures isProcessingHit is reset if game status changes externally from the hit process
+    // Also ensures isPlayerHit is false if we directly go to game_over or start_screen without a question.
     if (gameStatus !== 'question') {
       isProcessingHit.current = false;
-      // If game is not in 'question' state (e.g. playing, game_over after question, start_screen),
-      // isPlayerHit should be false, typically handled by handleAnswer or resetGameState.
-      // This ensures if we jump to game_over directly without handleAnswer, flash is off.
       if(gameStatus === 'game_over' || gameStatus === 'start_screen') {
         setIsPlayerHit(false);
       }
@@ -390,7 +387,7 @@ export default function EcoRoamPage() {
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
 
-    setIsPlayerHit(false); // Turn off red flash when answer is submitted
+    setIsPlayerHit(false); // Ensure flash is off when answer is processed, though it should be off by now
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -516,7 +513,7 @@ export default function EcoRoamPage() {
         {isPlayerHit && (
           <div 
             className="absolute inset-0 bg-destructive/40 pointer-events-none"
-            style={{ zIndex: 500 }} // Ensure flash is on top of game elements but below modal
+            style={{ zIndex: 500 }} 
           ></div>
         )}
         <div
