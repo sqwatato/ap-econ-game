@@ -94,7 +94,10 @@ const ECONOMIC_CONDITIONS = [
     "cost-push inflation",
     "economic boom with low unemployment",
     "deflationary pressures",
-    "liquidity trap"
+    "liquidity trap",
+    "rapid economic growth leading to resource scarcity",
+    "unexpected decrease in consumer confidence",
+    "significant increase in oil prices affecting production costs"
 ];
 
 
@@ -212,7 +215,6 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false); 
     setIsFetchingCauseEffect(false);
 
-    // Fetch initial questions when game state is reset (i.e., when "Start Game" is clicked)
     fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
     fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     
@@ -225,13 +227,12 @@ export default function EcoRoamPage() {
       return; 
     }
     isProcessingHit.current = true;
-    setIsPlayerHit(true); // Activate red flash
-    setGameStatus('question'); // Change status immediately to pause game loop updates
+    setIsPlayerHit(true); 
+    setGameStatus('question'); 
 
 
-    // 1-second delay before showing the question modal
     setTimeout(async () => {
-      setIsPlayerHit(false); // Turn off red flash when modal is about to appear
+      setIsPlayerHit(false); 
 
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
@@ -241,7 +242,7 @@ export default function EcoRoamPage() {
         if (questionData) {
           setTriviaQuestionQueue(prev => prev.slice(1));
         }
-      } else { // MonsterType.CAUSE_EFFECT
+      } else { 
         questionData = causeEffectQuestionQueue[0];
         if (questionData) {
           setCauseEffectQuestionQueue(prev => prev.slice(1));
@@ -307,7 +308,6 @@ export default function EcoRoamPage() {
   };
 
   useEffect(() => {
-    // Only try to top up the queue if the game is actively playing and queue is low
     if (gameStatus === 'playing' && triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
         const numToFetch = MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length;
         if (numToFetch > 0) fetchTriviaQuestions(numToFetch);
@@ -315,7 +315,6 @@ export default function EcoRoamPage() {
   }, [triviaQuestionQueue.length, isFetchingTrivia, gameStatus, fetchTriviaQuestions]);
 
   useEffect(() => {
-    // Only try to top up the queue if the game is actively playing and queue is low
     if (gameStatus === 'playing' && causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
          const numToFetch = MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length;
          if (numToFetch > 0) fetchCauseEffectQuestions(numToFetch);
@@ -465,13 +464,13 @@ export default function EcoRoamPage() {
             setMonstersKilled(killed => killed + 1);
             return prev
               .filter(m => m.id !== currentQuestionContext.monsterId)
-              .map(monster => ({ // Reset shoot timers for all remaining monsters
+              .map(monster => ({ 
                 ...monster,
                 nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
                 isPreparingToShoot: false,
               }));
         }
-        return prev.map(monster => ({ // If monster was already killed, just reset other monsters
+        return prev.map(monster => ({ 
             ...monster,
             nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
             isPreparingToShoot: false,
@@ -571,6 +570,7 @@ export default function EcoRoamPage() {
           Start Game
         </Button>
          <p className="mt-8 text-sm text-muted-foreground">Controls: Arrow Keys or WASD to move. Mouse Click to shoot.</p>
+         <p className="mt-4 text-xs text-muted-foreground">Made by Jayden Lim & Aidan Chan P2</p>
       </div>
     );
   }

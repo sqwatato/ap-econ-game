@@ -40,11 +40,11 @@ const generateEconomicsQuestionPrompt = ai.definePrompt({
   prompt: `You are an AP Macroeconomics question generator. Generate a multiple-choice question on the topic of {{{topic}}}. Provide four answer choices, only one of which is correct. Indicate the index of the correct answer in the choices array (0, 1, 2, or 3). Also, provide a short explanation of the correct answer.
 
 Example:
-Topic: Fiscal Policy
-Question: Which of the following is an example of expansionary fiscal policy?
-Choices: ["Increasing government spending", "Increasing taxes", "Decreasing the money supply", "Raising interest rates"]
-CorrectAnswerIndex: 0
-Explanation: Increasing government spending is an example of expansionary fiscal policy, which aims to stimulate economic growth during a recession.
+Topic: Supply and Demand
+Question: If the demand for a product increases while the supply remains constant, what is the likely effect on the product's price and quantity sold?
+Choices: ["Price decreases, quantity decreases", "Price increases, quantity increases", "Price decreases, quantity increases", "Price increases, quantity decreases"]
+CorrectAnswerIndex: 1
+Explanation: When demand increases and supply is constant, both equilibrium price and quantity sold tend to increase as consumers are willing to pay more and producers sell more at higher prices.
 
 Topic: {{{topic}}}
 Question:`, 
@@ -61,3 +61,4 @@ const generateEconomicsQuestionFlow = ai.defineFlow(
     return output!;
   }
 );
+
