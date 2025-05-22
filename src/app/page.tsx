@@ -10,6 +10,7 @@ import PlayerProjectileComponent from '@/components/game/PlayerProjectile'; // P
 import ScoreDisplay from '@/components/game/ScoreDisplay';
 import QuestionModal from '@/components/game/QuestionModal';
 import GameOverScreen from '@/components/game/GameOverScreen';
+import UsernamePromptModal from '@/components/game/UsernamePromptModal';
 import {
   PLAYER_SIZE, PLAYER_SPEED, MONSTER_SIZE, MONSTER_SPEED, MONSTER_SHOOT_INTERVAL_BASE, MONSTER_SHOOT_INTERVAL_RANDOM, MONSTER_CHARGE_DURATION,
   MAX_MONSTERS, MONSTER_SPAWN_INTERVAL, PROJECTILE_SIZE, PROJECTILE_SPEED,
@@ -19,17 +20,19 @@ import {
   MonsterType, KEY_BINDINGS
 } from '@/config/game';
 import type {
-  PlayerState, MonsterInstance, ProjectileInstance, PlayerProjectileInstance, CurrentQuestionContext, GameOverData, BaseQuestionOutput
+  PlayerState, MonsterInstance, ProjectileInstance, PlayerProjectileInstance, CurrentQuestionContext, GameOverData, BaseQuestionOutput, LeaderboardEntry
 } from '@/types/game';
 import { generateEconomicsQuestion } from '@/ai/flows/generate-economics-question';
 import { generateCauseEffectQuestion } from '@/ai/flows/generate-cause-effect-question';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation'; // For App Router
 
-type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over';
+type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over' | 'prompting_username' | 'viewing_leaderboard';
 
 const MAX_QUESTION_QUEUE_SIZE = 2;
 const MIN_QUESTION_QUEUE_SIZE = 1; 
+const USERNAME_STORAGE_KEY = 'ecoRoamUsername';
 
 const AP_MACRO_TOPICS = [
   "Basic Economic Concepts (Scarcity, Opportunity Cost, PPC)",
@@ -123,6 +126,7 @@ export default function EcoRoamPage() {
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastMonsterSpawnTime = useRef<number>(0);
   const isProcessingHit = useRef<boolean>(false);
+  const router = useRouter();
 
 
   const fetchTriviaQuestions = useCallback(async (count: number) => {
@@ -214,25 +218,68 @@ export default function EcoRoamPage() {
     setCauseEffectQuestionQueue([]);
     setIsFetchingTrivia(false); 
     setIsFetchingCauseEffect(false);
-
-    fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
-    fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     
     setTimeout(() => spawnMonster(Math.floor(MAX_MONSTERS / 2) || 1), 100);
-  }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions]);
+  }, [spawnMonster]);
+
+  const handleEndGameFlow = async (finalScore: number, finalTimeSurvived: number, finalMonstersKilled: number, failedQ?: GameOverData['failedQuestion']) => {
+    const storedUsername = localStorage.getItem(USERNAME_STORAGE_KEY);
+    const currentGameOverData: GameOverData = {
+        score: finalScore,
+        timeSurvived: Math.floor(finalTimeSurvived * SCORE_INCREMENT_INTERVAL / 1000),
+        monstersKilled: finalMonstersKilled,
+        failedQuestion: failedQ,
+    };
+    setGameOverData(currentGameOverData);
+
+    if (finalScore > 0 && !storedUsername) {
+      setGameStatus('prompting_username');
+    } else if (finalScore > 0 && storedUsername) {
+      await submitScoreToLeaderboard(storedUsername, finalScore, currentGameOverData);
+      setGameStatus('game_over');
+    } else {
+      setGameStatus('game_over');
+    }
+  };
+  
+  const submitScoreToLeaderboard = async (name: string, currentScore: number, currentGameOverData: GameOverData) => {
+    try {
+      const response = await fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, score: currentScore }),
+      });
+      if (response.ok) {
+        const updatedLeaderboard: LeaderboardEntry[] = await response.json();
+        const rank = updatedLeaderboard.findIndex(entry => entry.name === name && entry.score === currentScore) + 1;
+        setGameOverData({ ...currentGameOverData, rank: rank > 0 ? rank : undefined });
+      } else {
+        console.error('Failed to submit score:', await response.text());
+      }
+    } catch (error) {
+      console.error('Error submitting score:', error);
+    }
+  };
+
+  const handleUsernameSubmit = async (name: string) => {
+    localStorage.setItem(USERNAME_STORAGE_KEY, name);
+    if (gameOverData) {
+      await submitScoreToLeaderboard(name, gameOverData.score, gameOverData);
+    }
+    setGameStatus('game_over');
+  };
 
 
   const handleProjectileHit = useCallback(async (projectile: ProjectileInstance) => {
-    if (isProcessingHit.current || gameStatus === 'question' || gameStatus === 'game_over') {
+    if (isProcessingHit.current || gameStatus === 'question' || gameStatus === 'game_over' || gameStatus === 'prompting_username') {
       return; 
     }
     isProcessingHit.current = true;
     setIsPlayerHit(true); 
-    setGameStatus('question'); 
-
+    setGameStatus('question'); // Freeze game immediately
 
     setTimeout(async () => {
-      setIsPlayerHit(false); 
+      setIsPlayerHit(false); // Turn off red flash before showing question
 
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
@@ -267,9 +314,7 @@ export default function EcoRoamPage() {
           }
         } catch (error) {
           console.error("Error generating question on demand:", error);
-          const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
-          setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
-          setGameStatus('game_over'); 
+          handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "AI Error generating question.", correctAnswerText: "N/A"});
           isProcessingHit.current = false; 
           return; 
         }
@@ -284,9 +329,7 @@ export default function EcoRoamPage() {
         });
       } else {
         console.error("Failed to obtain a question for the player.");
-        const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
-        setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
-        setGameStatus('game_over');
+        handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "System Error: No question available.", correctAnswerText: "N/A"});
         isProcessingHit.current = false; 
       }
     }, 1000); 
@@ -294,16 +337,25 @@ export default function EcoRoamPage() {
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
   useEffect(() => {
+    // This effect manages clearing the 'isProcessingHit' flag and 'isPlayerHit'
+    // when the game status changes away from 'question' or 'game_over'.
     if (gameStatus !== 'question') {
-      isProcessingHit.current = false;
-      if (gameStatus === 'game_over' || gameStatus === 'start_screen') {
-        setIsPlayerHit(false); 
-      }
+        isProcessingHit.current = false; 
+        if (gameStatus !== 'prompting_username') { // Don't turn off if prompting
+            // setIsPlayerHit(false); // This is now handled more precisely within handleProjectileHit and handleAnswer
+        }
     }
-  }, [gameStatus]);
+    if (gameStatus === 'start_screen' || gameStatus === 'playing') {
+        setIsPlayerHit(false); // Ensure it's off if we restart or are just playing
+    }
+}, [gameStatus]);
+
 
   const startGame = () => {
     resetGameState(); 
+    // Initial question fetching
+    fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
+    fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     setGameStatus('playing');
   };
 
@@ -454,27 +506,23 @@ export default function EcoRoamPage() {
 
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
-
+    
     isProcessingHit.current = false; 
+    setIsPlayerHit(false); // Turn off red flash if it was somehow still on
 
     if (isCorrect) {
       setMonsters(prev => {
         const monsterExists = prev.some(m => m.id === currentQuestionContext.monsterId);
         if (monsterExists) {
             setMonstersKilled(killed => killed + 1);
-            return prev
-              .filter(m => m.id !== currentQuestionContext.monsterId)
-              .map(monster => ({ 
-                ...monster,
-                nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
-                isPreparingToShoot: false,
-              }));
         }
-        return prev.map(monster => ({ 
+        return prev
+          .filter(m => m.id !== currentQuestionContext.monsterId)
+          .map(monster => ({ 
             ...monster,
             nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
             isPreparingToShoot: false,
-        }));
+          }));
       });
       setScore(prev => prev + 50); 
       setProjectiles([]); 
@@ -483,13 +531,8 @@ export default function EcoRoamPage() {
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
-      const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
-      setGameOverData({
-        score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled,
-        failedQuestion: { questionText: qData.question, correctAnswerText, explanationText: qData.explanation }
-      });
       setCurrentQuestionContext(null); 
-      setGameStatus('game_over'); 
+      handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: qData.question, correctAnswerText, explanationText: qData.explanation });
     }
   };
 
@@ -566,9 +609,19 @@ export default function EcoRoamPage() {
       <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-8">
         <h1 className="text-6xl font-bold text-primary mb-4" style={{fontFamily: "'Press Start 2P', cursive"}}>EcoRoam</h1>
         <p className="text-xl mb-8 text-center max-w-md">Navigate the treacherous lands of economics! Answer questions to defeat monsters and survive. Click to shoot.</p>
-        <Button onClick={startGame} size="lg" className="px-12 py-6 text-2xl bg-primary hover:bg-primary/90 text-primary-foreground">
-          Start Game
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Button onClick={startGame} size="lg" className="px-12 py-6 text-2xl bg-primary hover:bg-primary/90 text-primary-foreground">
+            Start Game
+          </Button>
+          <Button 
+            onClick={() => router.push('/leaderboard')} 
+            size="lg" 
+            variant="outline"
+            className="px-12 py-6 text-2xl"
+          >
+            View Leaderboard
+          </Button>
+        </div>
          <p className="mt-8 text-sm text-muted-foreground">Controls: Arrow Keys or WASD to move. Mouse Click to shoot.</p>
          <p className="mt-4 text-xs text-muted-foreground">Made by Jayden Lim & Aidan Chan P2</p>
       </div>
@@ -646,8 +699,11 @@ export default function EcoRoamPage() {
       {gameStatus === 'question' && currentQuestionContext && (
         <QuestionModal questionContext={currentQuestionContext} onAnswer={handleAnswer} />
       )}
+      {gameStatus === 'prompting_username' && gameOverData && (
+        <UsernamePromptModal onSubmit={handleUsernameSubmit} currentScore={gameOverData.score} />
+      )}
       {gameStatus === 'game_over' && gameOverData && (
-        <GameOverScreen gameOverData={gameOverData} onRestart={startGame} />
+        <GameOverScreen gameOverData={gameOverData} onRestart={startGame} onViewLeaderboard={() => router.push('/leaderboard')} />
       )}
       {gameStatus === 'playing' && (
         <p className="mt-4 text-xs text-muted-foreground">Controls: Arrow Keys or WASD to move. Mouse Click to shoot.</p>
@@ -655,4 +711,3 @@ export default function EcoRoamPage() {
     </main>
   );
 }
-

@@ -7,9 +7,10 @@ import type { GameOverData } from '@/types/game';
 interface GameOverScreenProps {
   gameOverData: GameOverData;
   onRestart: () => void;
+  onViewLeaderboard: () => void;
 }
 
-const GameOverScreen: React.FC<GameOverScreenProps> = ({ gameOverData, onRestart }) => {
+const GameOverScreen: React.FC<GameOverScreenProps> = ({ gameOverData, onRestart, onViewLeaderboard }) => {
   const formatTime = (totalSeconds: number) => {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
@@ -25,6 +26,9 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ gameOverData, onRestart
         </CardHeader>
         <CardContent className="space-y-3 text-center">
           <p className="text-xl">Final Score: <span className="font-bold text-primary">{gameOverData.score}</span></p>
+          {gameOverData.rank && (
+             <p>Leaderboard Rank: <span className="font-semibold text-accent">{gameOverData.rank}</span></p>
+          )}
           <p>Time Survived: <span className="font-semibold">{formatTime(gameOverData.timeSurvived)}</span></p>
           <p>Monsters Defeated: <span className="font-semibold">{gameOverData.monstersKilled}</span></p>
           {gameOverData.failedQuestion && (
@@ -38,13 +42,21 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ gameOverData, onRestart
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex justify-center">
+        <CardFooter className="flex flex-col sm:flex-row justify-center gap-3">
           <Button 
             onClick={onRestart} 
-            className="px-8 py-3 text-lg bg-primary hover:bg-primary/90 text-primary-foreground"
+            className="px-8 py-3 text-lg bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto"
             aria-label="Play Again"
           >
             Play Again
+          </Button>
+          <Button
+            onClick={onViewLeaderboard}
+            variant="outline"
+            className="px-8 py-3 text-lg w-full sm:w-auto"
+            aria-label="View Leaderboard"
+          >
+            View Leaderboard
           </Button>
         </CardFooter>
       </Card>

@@ -51,5 +51,12 @@ export interface GameOverData {
     correctAnswerText: string;
     explanationText?: string;
   };
+  rank?: number; // Optional: Player's rank on the leaderboard
 }
 
+export interface LeaderboardEntry {
+  id: string;
+  name: string;
+  score: number;
+  date: string; // ISO string format
+}
