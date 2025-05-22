@@ -162,68 +162,72 @@ export default function EcoRoamPage() {
     }
     isProcessingHit.current = true;
 
-    setIsPlayerHit(true);
+    setIsPlayerHit(true); // Immediate flash
     setTimeout(() => setIsPlayerHit(false), 300); 
 
-    setGameStatus('question'); 
+    // Introduce 1-second delay before showing the question
+    setTimeout(async () => {
+      setGameStatus('question'); 
 
-    let questionData: BaseQuestionOutput | undefined;
-    const monsterType = projectile.monsterType;
-    
-    if (monsterType === MonsterType.TRIVIA) {
-      questionData = triviaQuestionQueue[0];
-      if (questionData) {
-        setTriviaQuestionQueue(prev => prev.slice(1));
-      }
-    } else { 
-      questionData = causeEffectQuestionQueue[0];
-      if (questionData) {
-        setCauseEffectQuestionQueue(prev => prev.slice(1));
-      }
-    }
-    
-    // Fetch replacement questions immediately after one is used.
-    if (monsterType === MonsterType.TRIVIA && triviaQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
-        fetchTriviaQuestions(1);
-    } else if (monsterType === MonsterType.CAUSE_EFFECT && causeEffectQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
-        fetchCauseEffectQuestions(1);
-    }
-
-
-    if (!questionData) {
-      console.warn(`Queue empty for ${monsterType}, fetching on demand.`);
-      try {
-        if (monsterType === MonsterType.TRIVIA) {
-          const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
-          const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-          questionData = await generateEconomicsQuestion({ topic: randomTopic });
-        } else { 
-          const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
-          const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
-          questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
+      let questionData: BaseQuestionOutput | undefined;
+      const monsterType = projectile.monsterType;
+      
+      if (monsterType === MonsterType.TRIVIA) {
+        questionData = triviaQuestionQueue[0];
+        if (questionData) {
+          setTriviaQuestionQueue(prev => prev.slice(1));
         }
-      } catch (error) {
-        console.error("Error generating question on demand:", error);
-        const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
-        setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
-        setGameStatus('game_over'); 
-        return; 
+      } else { // MonsterType.CAUSE_EFFECT
+        questionData = causeEffectQuestionQueue[0];
+        if (questionData) {
+          setCauseEffectQuestionQueue(prev => prev.slice(1));
+        }
       }
-    }
-    
-    if (questionData) {
-      setCurrentQuestionContext({
-        monsterId: projectile.monsterId,
-        projectileId: projectile.id,
-        questionData,
-        monsterType: projectile.monsterType,
-      });
-    } else {
-      console.error("Failed to obtain a question for the player.");
-      const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
-      setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
-      setGameStatus('game_over');
-    }
+      
+      // Fetch replacement questions immediately after one is used.
+      if (monsterType === MonsterType.TRIVIA && triviaQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
+          fetchTriviaQuestions(1);
+      } else if (monsterType === MonsterType.CAUSE_EFFECT && causeEffectQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
+          fetchCauseEffectQuestions(1);
+      }
+
+
+      if (!questionData) {
+        console.warn(`Queue empty for ${monsterType}, fetching on demand.`);
+        try {
+          if (monsterType === MonsterType.TRIVIA) {
+            const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
+            const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+            questionData = await generateEconomicsQuestion({ topic: randomTopic });
+          } else { // MonsterType.CAUSE_EFFECT
+            const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
+            const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+            questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
+          }
+        } catch (error) {
+          console.error("Error generating question on demand:", error);
+          const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
+          setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
+          setGameStatus('game_over'); 
+          return; 
+        }
+      }
+      
+      if (questionData) {
+        setCurrentQuestionContext({
+          monsterId: projectile.monsterId,
+          projectileId: projectile.id,
+          questionData,
+          monsterType: projectile.monsterType,
+        });
+      } else {
+        console.error("Failed to obtain a question for the player.");
+        const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
+        setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
+        setGameStatus('game_over');
+      }
+    }, 1000); // 1-second delay
+
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
   useEffect(() => {
