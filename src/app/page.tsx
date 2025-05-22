@@ -1,3 +1,4 @@
+
 // src/app/page.tsx
 "use client";
 
@@ -522,22 +523,22 @@ export default function EcoRoamPage() {
         >
           {/* World Boundaries */}
           <div
-            className="absolute bg-border/50"
+            className="absolute bg-black"
             style={{ left: 0, top: 0, width: WORLD_WIDTH, height: boundaryThickness }}
             aria-label="Top Boundary"
           />
           <div
-            className="absolute bg-border/50"
+            className="absolute bg-black"
             style={{ left: 0, top: WORLD_HEIGHT - boundaryThickness, width: WORLD_WIDTH, height: boundaryThickness }}
             aria-label="Bottom Boundary"
           />
           <div
-            className="absolute bg-border/50"
+            className="absolute bg-black"
             style={{ left: 0, top: 0, width: boundaryThickness, height: WORLD_HEIGHT }}
             aria-label="Left Boundary"
           />
           <div
-            className="absolute bg-border/50"
+            className="absolute bg-black"
             style={{ left: WORLD_WIDTH - boundaryThickness, top: 0, width: boundaryThickness, height: WORLD_HEIGHT }}
             aria-label="Right Boundary"
           />
