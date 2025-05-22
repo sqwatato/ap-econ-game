@@ -6,16 +6,18 @@ export const MONSTER_SIZE = 30;
 export const MONSTER_SPEED = 1.5; // pixels per frame update for monsters
 export const MONSTER_SHOOT_INTERVAL_BASE = 3000; // ms (min delay: 3 seconds)
 export const MONSTER_SHOOT_INTERVAL_RANDOM = 5000; // ms (max additional delay: 5 seconds, total 3-8 seconds)
-// export const MAX_MONSTERS = 19; // Removed maximum monster cap
-export const MONSTER_SPAWN_INTERVAL = 2400; // ms, how often to try spawning a new monster
 export const MONSTER_CHARGE_DURATION = 1000; // ms, how long monster charges before shooting
 export const MONSTER_PROJECTILE_SPREAD_ANGLE = (Math.PI / 12) * 1.25; // Approx 18.75 degrees
+
+export const MONSTER_SPAWN_CYCLE_INTERVAL = 10000; // ms (10 seconds) - how often a new wave spawns
+export const INITIAL_MONSTER_SPAWN_BATCH_SIZE = 10; // Initial number of monsters in a wave
+export const MONSTER_SPAWN_BATCH_INCREMENT = 2; // How many more monsters to add to each subsequent wave
 
 export const PROJECTILE_SIZE = 8; // Monster projectile size
 export const PROJECTILE_SPEED = 8; // Monster projectile speed
 
 export const PLAYER_PROJECTILE_SIZE = 6;
-export const PLAYER_PROJECTILE_SPEED = 10.08; // Player projectile speed (was 8.4, increased by 20%)
+export const PLAYER_PROJECTILE_SPEED = 10.08; // Player projectile speed
 
 // Define viewport dimensions (the visible part of the game)
 export const VIEWPORT_WIDTH = 800;

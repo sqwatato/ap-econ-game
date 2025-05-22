@@ -13,7 +13,8 @@ import GameOverScreen from '@/components/game/GameOverScreen';
 import UsernamePromptModal from '@/components/game/UsernamePromptModal';
 import {
   PLAYER_SIZE, PLAYER_SPEED, MONSTER_SIZE, MONSTER_SPEED, MONSTER_SHOOT_INTERVAL_BASE, MONSTER_SHOOT_INTERVAL_RANDOM, MONSTER_CHARGE_DURATION,
-  MONSTER_SPAWN_INTERVAL, PROJECTILE_SIZE, PROJECTILE_SPEED, MONSTER_PROJECTILE_SPREAD_ANGLE,
+  MONSTER_SPAWN_CYCLE_INTERVAL, INITIAL_MONSTER_SPAWN_BATCH_SIZE, MONSTER_SPAWN_BATCH_INCREMENT,
+  PROJECTILE_SIZE, PROJECTILE_SPEED, MONSTER_PROJECTILE_SPREAD_ANGLE,
   PLAYER_PROJECTILE_SIZE, PLAYER_PROJECTILE_SPEED,
   WORLD_WIDTH, WORLD_HEIGHT, VIEWPORT_WIDTH, VIEWPORT_HEIGHT,
   SCORE_INCREMENT_INTERVAL, SCORE_INCREMENT_AMOUNT, INITIAL_PLAYER_X, INITIAL_PLAYER_Y,
@@ -32,7 +33,6 @@ type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over' | 'promp
 
 const MAX_QUESTION_QUEUE_SIZE = 2;
 const MIN_QUESTION_QUEUE_SIZE = 1;
-const INITIAL_MONSTER_SPAWN_COUNT = 3; // Number of monsters to spawn initially
 
 const AP_MACRO_TOPICS = [
   "Basic Economic Concepts (Scarcity, Opportunity Cost, PPC)",
@@ -149,6 +149,8 @@ export default function EcoRoamPage() {
   const [causeEffectQuestionQueue, setCauseEffectQuestionQueue] = useState<BaseQuestionOutput[]>([]);
   const [isFetchingTrivia, setIsFetchingTrivia] = useState(false);
   const [isFetchingCauseEffect, setIsFetchingCauseEffect] = useState(false);
+  const [currentMonsterSpawnBatchSize, setCurrentMonsterSpawnBatchSize] = useState(INITIAL_MONSTER_SPAWN_BATCH_SIZE);
+
 
   const pressedKeys = useRef<Set<string>>(new Set());
   const gameAreaRef = useRef<HTMLDivElement>(null);
@@ -230,7 +232,6 @@ export default function EcoRoamPage() {
     setMonsters(prevMonsters => {
       const newMonstersList: MonsterInstance[] = [];
       for (let i = 0; i < count; i++) {
-        // Removed MAX_MONSTERS check: if (prevMonsters.length + newMonstersList.length >= MAX_MONSTERS) break;
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
         const spawnPadding = MONSTER_SIZE / 2;
         const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
@@ -262,7 +263,9 @@ export default function EcoRoamPage() {
     setGameOverData(null);
     setIsPlayerHit(false);
     pressedKeys.current.clear();
-    lastMonsterSpawnTime.current = Date.now();
+    
+    setCurrentMonsterSpawnBatchSize(INITIAL_MONSTER_SPAWN_BATCH_SIZE);
+    lastMonsterSpawnTime.current = Date.now(); 
     isProcessingHit.current = false;
 
     setTriviaQuestionQueue([]);
@@ -276,7 +279,9 @@ export default function EcoRoamPage() {
         fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     }
 
-    setTimeout(() => spawnMonster(INITIAL_MONSTER_SPAWN_COUNT), 100); // Spawn initial set of monsters
+    // Spawn initial batch of monsters
+    spawnMonster(INITIAL_MONSTER_SPAWN_BATCH_SIZE);
+
   }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions, gameStatus]);
 
   const handleEndGameFlow = async (finalScore: number, finalTimeSurvived: number, finalMonstersKilled: number, failedQ?: GameOverData['failedQuestion']) => {
@@ -580,14 +585,16 @@ export default function EcoRoamPage() {
       });
 
 
-      if (now - lastMonsterSpawnTime.current > MONSTER_SPAWN_INTERVAL) { // Removed monsters.length < MAX_MONSTERS check
-        spawnMonster(1);
+      if (now - lastMonsterSpawnTime.current > MONSTER_SPAWN_CYCLE_INTERVAL) {
+        spawnMonster(currentMonsterSpawnBatchSize);
         lastMonsterSpawnTime.current = now;
+        setCurrentMonsterSpawnBatchSize(prev => prev + MONSTER_SPAWN_BATCH_INCREMENT);
+        console.log(`[GameLoop] Spawned wave of ${currentMonsterSpawnBatchSize}. Next wave size: ${currentMonsterSpawnBatchSize + MONSTER_SPAWN_BATCH_INCREMENT}`);
       }
     });
 
     return () => cancelAnimationFrame(gameLoop);
-  }, [gameStatus, playerState.x, playerState.y, monsters, projectiles, playerProjectiles, spawnMonster, handleProjectileHit]);
+  }, [gameStatus, playerState.x, playerState.y, monsters, projectiles, playerProjectiles, spawnMonster, handleProjectileHit, currentMonsterSpawnBatchSize]);
 
 
   const handleAnswer = (isCorrect: boolean) => {
@@ -712,13 +719,6 @@ export default function EcoRoamPage() {
     };
   }, []); 
 
-  useEffect(() => {
-    if (gameStatus === 'playing' && monsters.length === 0) { // Removed MAX_MONSTERS > 0 check
-       console.log("[EffectNoMonsters] No monsters on screen, spawning initial set.");
-       setTimeout(() => spawnMonster(INITIAL_MONSTER_SPAWN_COUNT), 100); // Spawn fixed initial count
-       lastMonsterSpawnTime.current = Date.now();
-    }
-  }, [gameStatus, monsters.length, spawnMonster]);
 
   const worldOffsetX = VIEWPORT_WIDTH / 2 - playerState.x;
   const worldOffsetY = VIEWPORT_HEIGHT / 2 - playerState.y;
@@ -842,3 +842,4 @@ export default function EcoRoamPage() {
     </main>
   );
 }
+
