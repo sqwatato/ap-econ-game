@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over';
 
 const MAX_QUESTION_QUEUE_SIZE = 2;
-const MIN_QUESTION_QUEUE_SIZE = 1; // Fetch if queue length < this value. Adjusted to 1 to ensure quicker refill.
+const MIN_QUESTION_QUEUE_SIZE = 1; 
 
 export default function EcoRoamPage() {
   const [playerState, setPlayerState] = useState<PlayerState>({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
@@ -36,7 +36,7 @@ export default function EcoRoamPage() {
   const [projectiles, setProjectiles] = useState<ProjectileInstance[]>([]);
   const [playerProjectiles, setPlayerProjectiles] = useState<PlayerProjectileInstance[]>([]);
   const [score, setScore] = useState(0);
-  const [timeSurvived, setTimeSurvived] = useState(0);
+  const [timeSurvived, setTimeSurvived] = useState(0); // in 100ms intervals
   const [monstersKilled, setMonstersKilled] = useState(0);
   const [gameStatus, setGameStatus] = useState<GameStatus>('start_screen');
   const [currentQuestionContext, setCurrentQuestionContext] = useState<CurrentQuestionContext | null>(null);
@@ -52,6 +52,59 @@ export default function EcoRoamPage() {
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastMonsterSpawnTime = useRef<number>(0);
   const isProcessingHit = useRef<boolean>(false);
+
+
+  const fetchTriviaQuestions = useCallback(async (count: number) => {
+    if (isFetchingTrivia || count <= 0 || triviaQuestionQueue.length >= MAX_QUESTION_QUEUE_SIZE) return;
+    setIsFetchingTrivia(true);
+    try {
+      const promises = [];
+      const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
+      for (let i = 0; i < count; i++) {
+        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+        promises.push(generateEconomicsQuestion({ topic: randomTopic }));
+      }
+      const results = await Promise.allSettled(promises);
+      const newQuestions = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
+      
+      setTriviaQuestionQueue(prev => {
+        const combined = [...prev, ...newQuestions];
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); // Ensure queue doesn't exceed max size
+      });
+    } catch (error) {
+      console.error("Error fetching trivia questions:", error);
+    } finally {
+      setIsFetchingTrivia(false);
+    }
+  }, [isFetchingTrivia, triviaQuestionQueue.length]);
+
+  const fetchCauseEffectQuestions = useCallback(async (count: number) => {
+    if (isFetchingCauseEffect || count <= 0 || causeEffectQuestionQueue.length >= MAX_QUESTION_QUEUE_SIZE) return;
+    setIsFetchingCauseEffect(true);
+    try {
+      const promises = [];
+      const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
+      for (let i = 0; i < count; i++) {
+        const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+        promises.push(generateCauseEffectQuestion({ economicCondition: randomCondition }));
+      }
+      const results = await Promise.allSettled(promises);
+      const newQuestions = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
+      
+      setCauseEffectQuestionQueue(prev => {
+        const combined = [...prev, ...newQuestions];
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); // Ensure queue doesn't exceed max size
+      });
+    } catch (error) {
+      console.error("Error fetching cause-effect questions:", error);
+    } finally {
+      setIsFetchingCauseEffect(false);
+    }
+  }, [isFetchingCauseEffect, causeEffectQuestionQueue.length]);
 
   const spawnMonster = useCallback((count = 1) => {
     setMonsters(prevMonsters => {
@@ -73,58 +126,6 @@ export default function EcoRoamPage() {
       return [...prevMonsters, ...newMonsters];
     });
   }, []);
-
-  const fetchTriviaQuestions = useCallback(async (count: number) => {
-    if (isFetchingTrivia || count <= 0) return;
-    setIsFetchingTrivia(true);
-    try {
-      const promises = [];
-      const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
-      for (let i = 0; i < count; i++) {
-        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-        promises.push(generateEconomicsQuestion({ topic: randomTopic }));
-      }
-      const results = await Promise.allSettled(promises);
-      const newQuestions = results
-        .filter(r => r.status === 'fulfilled')
-        .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
-      
-      setTriviaQuestionQueue(prev => {
-        const combined = [...prev, ...newQuestions];
-        return combined.slice(-MAX_QUESTION_QUEUE_SIZE);
-      });
-    } catch (error) {
-      console.error("Error fetching trivia questions:", error);
-    } finally {
-      setIsFetchingTrivia(false);
-    }
-  }, [isFetchingTrivia]);
-
-  const fetchCauseEffectQuestions = useCallback(async (count: number) => {
-    if (isFetchingCauseEffect || count <= 0) return;
-    setIsFetchingCauseEffect(true);
-    try {
-      const promises = [];
-      const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
-      for (let i = 0; i < count; i++) {
-        const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
-        promises.push(generateCauseEffectQuestion({ economicCondition: randomCondition }));
-      }
-      const results = await Promise.allSettled(promises);
-      const newQuestions = results
-        .filter(r => r.status === 'fulfilled')
-        .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
-      
-      setCauseEffectQuestionQueue(prev => {
-        const combined = [...prev, ...newQuestions];
-        return combined.slice(-MAX_QUESTION_QUEUE_SIZE);
-      });
-    } catch (error) {
-      console.error("Error fetching cause-effect questions:", error);
-    } finally {
-      setIsFetchingCauseEffect(false);
-    }
-  }, [isFetchingCauseEffect]);
   
   const resetGameState = useCallback(() => {
     setPlayerState({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
@@ -202,7 +203,8 @@ export default function EcoRoamPage() {
         }
       } catch (error) {
         console.error("Error generating question on demand:", error);
-        setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
+        const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
+        setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
         setGameStatus('game_over'); 
         return; 
       }
@@ -217,7 +219,8 @@ export default function EcoRoamPage() {
       });
     } else {
       console.error("Failed to obtain a question for the player.");
-      setGameOverData({ score, timeSurvived, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
+      const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
+      setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
       setGameStatus('game_over');
     }
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
@@ -229,7 +232,7 @@ export default function EcoRoamPage() {
   }, [gameStatus]);
 
   const startGame = () => {
-    resetGameState(); // resetGameState now also handles initial queue filling
+    resetGameState(); 
     setGameStatus('playing');
   };
 
@@ -345,7 +348,7 @@ export default function EcoRoamPage() {
             if (distance < PLAYER_PROJECTILE_SIZE / 2 + MONSTER_SIZE / 2) {
               hit = true;
               hitMonsterIds.add(monster.id);
-              setScore(prev => prev + 20);
+              setScore(prev => prev + 25); // Monster kill score update
               break; 
             }
           }
@@ -396,8 +399,9 @@ export default function EcoRoamPage() {
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
+      const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
       setGameOverData({
-        score, timeSurvived, monstersKilled,
+        score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled,
         failedQuestion: { questionText: qData.question, correctAnswerText, explanationText: qData.explanation }
       });
       setGameStatus('game_over');
@@ -428,7 +432,7 @@ export default function EcoRoamPage() {
     if (gameStatus !== 'playing') return;
     const interval = setInterval(() => {
       setScore(prev => prev + SCORE_INCREMENT_AMOUNT);
-      setTimeSurvived(prev => prev + 1);
+      setTimeSurvived(prev => prev + 1); // timeSurvived increments by 1 unit (representing 100ms)
     }, SCORE_INCREMENT_INTERVAL);
     return () => clearInterval(interval);
   }, [gameStatus]);
@@ -484,6 +488,9 @@ export default function EcoRoamPage() {
       </div>
     );
   }
+  
+  // Convert timeSurvived (in 100ms units) to seconds for display
+  const displayedTimeSurvived = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-4 select-none">
@@ -548,7 +555,7 @@ export default function EcoRoamPage() {
 
         <PlayerComponent />
         
-        <ScoreDisplay score={score} timeSurvived={timeSurvived} monstersKilled={monstersKilled} />
+        <ScoreDisplay score={score} timeSurvived={displayedTimeSurvived} monstersKilled={monstersKilled} />
       </div>
 
       {gameStatus === 'question' && currentQuestionContext && (

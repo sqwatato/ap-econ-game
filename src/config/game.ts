@@ -24,8 +24,8 @@ export const VIEWPORT_HEIGHT = 600;
 export const WORLD_WIDTH = VIEWPORT_WIDTH * 2; // Example: world is twice the viewport width
 export const WORLD_HEIGHT = VIEWPORT_HEIGHT * 2; // Example: world is twice the viewport height
 
-export const SCORE_INCREMENT_INTERVAL = 1000; // ms
-export const SCORE_INCREMENT_AMOUNT = 10;
+export const SCORE_INCREMENT_INTERVAL = 100; // ms - 1 point per 100ms
+export const SCORE_INCREMENT_AMOUNT = 1; // Amount to increment score by for time survived
 
 // Initial player position in world coordinates
 export const INITIAL_PLAYER_X = WORLD_WIDTH / 2 - PLAYER_SIZE / 2;
@@ -46,5 +46,3 @@ export const KEY_BINDINGS = {
   A: 'a',
   D: 'd',
 };
-
-

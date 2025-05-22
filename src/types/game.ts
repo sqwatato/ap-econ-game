@@ -44,7 +44,7 @@ export interface CurrentQuestionContext {
 
 export interface GameOverData {
   score: number;
-  timeSurvived: number; // in seconds
+  timeSurvived: number; // in seconds (this is now actual seconds for display)
   monstersKilled: number;
   failedQuestion?: {
     questionText: string;
