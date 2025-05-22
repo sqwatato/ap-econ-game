@@ -1,104 +1,176 @@
-
 // src/app/api/leaderboard/route.ts
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { createClient, type RedisClientType } from 'redis';
 import type { LeaderboardEntry } from '@/types/game';
 
-// Path to the JSON file
-const LEADERBOARD_FILE_PATH = path.join(process.cwd(), 'data', 'leaderboard.json');
 const MAX_LEADERBOARD_ENTRIES = 100;
+const LEADERBOARD_KEY = 'leaderboard_scores'; // Sorted set for scores
+const LEADERBOARD_ENTRY_HASH_PREFIX = 'leaderboard_entry:'; // Prefix for hashes storing entry details
 
-async function readLeaderboard(): Promise<LeaderboardEntry[]> {
-  console.log('[API/Leaderboard] Attempting to read leaderboard from file:', LEADERBOARD_FILE_PATH);
-  try {
-    await fs.mkdir(path.dirname(LEADERBOARD_FILE_PATH), { recursive: true }); // Ensure data directory exists
-    const fileContent = await fs.readFile(LEADERBOARD_FILE_PATH, 'utf-8');
-    const leaderboard = JSON.parse(fileContent) as LeaderboardEntry[];
-    if (!Array.isArray(leaderboard)) {
-      console.warn('[API/Leaderboard] Leaderboard data in file is not an array, returning empty.');
-      return [];
-    }
-    // Ensure data is sorted and trimmed when read
-    const sortedLeaderboard = leaderboard.sort((a, b) => b.score - a.score).slice(0, MAX_LEADERBOARD_ENTRIES);
-    console.log(`[API/Leaderboard] Successfully read and sorted ${sortedLeaderboard.length} entries from file.`);
-    return sortedLeaderboard;
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      console.log('[API/Leaderboard] leaderboard.json not found, returning empty array.');
-      return []; // File doesn't exist, so leaderboard is empty
-    }
-    console.error('[API/Leaderboard] Error reading leaderboard from file:', error);
-    return []; // In case of other errors, return an empty array
-  }
-}
+let redis: RedisClientType | undefined;
+let redisConnectingPromise: Promise<RedisClientType> | undefined;
 
-async function writeLeaderboard(data: LeaderboardEntry[]): Promise<void> {
-  const sortedAndTrimmedData = data
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_LEADERBOARD_ENTRIES);
-  console.log(`[API/Leaderboard] Attempting to write ${sortedAndTrimmedData.length} entries to file...`, sortedAndTrimmedData.slice(0,3)); 
-  try {
-    await fs.mkdir(path.dirname(LEADERBOARD_FILE_PATH), { recursive: true }); // Ensure data directory exists
-    await fs.writeFile(LEADERBOARD_FILE_PATH, JSON.stringify(sortedAndTrimmedData, null, 2));
-    console.log('[API/Leaderboard] Successfully wrote leaderboard to file.');
-  } catch (error) {
-    console.error('[API/Leaderboard] Error writing leaderboard to file:', error);
-    // Consider if you need to throw here or handle differently
+async function getRedisClient(): Promise<RedisClientType> {
+  if (redis && redis.isOpen) {
+    return redis;
   }
+
+  if (redisConnectingPromise) {
+    return redisConnectingPromise;
+  }
+
+  if (!process.env.REDIS_URL) {
+    console.error('[API/Leaderboard] (Redis) REDIS_URL environment variable is not set.');
+    throw new Error('Redis configuration missing');
+  }
+
+  console.log('[API/Leaderboard] (Redis) Attempting to connect to Redis...');
+  const client = createClient({
+    url: process.env.REDIS_URL,
+  });
+
+  client.on('error', (err: unknown) => console.error('[API/Leaderboard] (Redis) Client Error', err));
+
+  redisConnectingPromise = client.connect()
+    .then((connectedClient: unknown) => {
+      console.log('[API/Leaderboard] (Redis) Successfully connected.');
+      redis = connectedClient as RedisClientType;
+      redisConnectingPromise = undefined; 
+      return redis;
+    })
+    .catch((err: unknown) => {
+      console.error('[API/Leaderboard] (Redis) Connection failed:', err);
+      redisConnectingPromise = undefined; 
+      redis = undefined; // Ensure client is undefined if connection fails
+      throw err; 
+    });
+
+  return redisConnectingPromise;
 }
 
 export async function GET() {
-  console.log('[API/Leaderboard] GET request received.');
+  console.log('[API/Leaderboard] (Redis) GET request received.');
   try {
-    const leaderboard = await readLeaderboard();
-    console.log('[API/Leaderboard] GET: Returning leaderboard data:', leaderboard.slice(0,3));
+    const client = await getRedisClient();
+    console.log('[API/Leaderboard] (Redis) Fetching top leaderboard entries...');
+
+    // Get top N entry IDs from the sorted set (highest scores first)
+    const entryIds = await client.zRangeWithScores(LEADERBOARD_KEY, 0, MAX_LEADERBOARD_ENTRIES - 1, { REV: true });
+    console.log(`[API/Leaderboard] (Redis) Fetched ${entryIds.length} entry IDs/scores from sorted set.`);
+
+    if (entryIds.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    const multi = client.multi();
+    entryIds.forEach(entry => {
+      multi.hGetAll(`${LEADERBOARD_ENTRY_HASH_PREFIX}${entry.value}`); // entry.value is the ID
+    });
+
+    const results = await multi.exec() as Record<string, string>[];
+    console.log(`[API/Leaderboard] (Redis) Fetched details for ${results.length} entries from hashes.`);
+
+    const leaderboard: LeaderboardEntry[] = results.map((entryData, index) => {
+      if (!entryData || Object.keys(entryData).length === 0) {
+        // This case might happen if a hash is missing for an ID in the sorted set
+        console.warn(`[API/Leaderboard] (Redis) Missing hash data for ID: ${entryIds[index]?.value}`);
+        return null;
+      }
+      return {
+        id: entryData.id,
+        name: entryData.name,
+        score: parseInt(entryData.score, 10),
+        date: entryData.date,
+      };
+    }).filter(entry => entry !== null) as LeaderboardEntry[];
+    
+    // The zRangeWithScores with REV:true should already return them in descending order by score.
+    // If secondary sort by date for ties is needed, it can be done here.
+    // For now, Redis's sorted set order is primary.
+    console.log('[API/Leaderboard] (Redis) GET: Returning leaderboard data (first 3):', leaderboard.slice(0,3));
     return NextResponse.json(leaderboard);
-  } catch (error) {
-    console.error('[API/Leaderboard] GET: Failed to get leaderboard:', error);
-    return NextResponse.json({ message: 'Failed to retrieve leaderboard data from file.' }, { status: 500 });
+
+  } catch (error: any) {
+    console.error('[API/Leaderboard] (Redis) GET: Failed to get leaderboard:', error.message, error.stack);
+    return NextResponse.json({ message: 'Failed to retrieve leaderboard data from Redis.' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
-  console.log('[API/Leaderboard] POST request received.');
+  console.log('[API/Leaderboard] (Redis) POST request received.');
   try {
     const body = await request.json();
-    console.log('[API/Leaderboard] POST: Request body:', body);
+    console.log('[API/Leaderboard] (Redis) POST: Request body:', body);
     const { name, score } = body as { name: string; score: number };
 
     if (!name || typeof score !== 'number') {
-      console.warn('[API/Leaderboard] POST: Invalid name or score received.');
+      console.warn('[API/Leaderboard] (Redis) POST: Invalid name or score received.');
       return NextResponse.json({ message: 'Invalid name or score' }, { status: 400 });
     }
     if (name.length > 20) {
-      console.warn('[API/Leaderboard] POST: Name too long.');
+      console.warn('[API/Leaderboard] (Redis) POST: Name too long.');
       return NextResponse.json({ message: 'Name too long (max 20 chars)' }, { status: 400 });
     }
 
     const newEntry: LeaderboardEntry = {
-      id: Date.now().toString() + Math.random().toString(36).substring(2,7), // Simple unique ID
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9), // More unique ID
       name,
       score,
       date: new Date().toISOString(),
     };
-    console.log('[API/Leaderboard] POST: Created new entry:', newEntry);
+    console.log('[API/Leaderboard] (Redis) POST: Created new entry:', newEntry);
 
-    const currentLeaderboard = await readLeaderboard();
-    console.log('[API/Leaderboard] POST: Current leaderboard size before add:', currentLeaderboard.length);
-    
-    currentLeaderboard.push(newEntry);
-    console.log('[API/Leaderboard] POST: Leaderboard size after add (before write):', currentLeaderboard.length);
+    const client = await getRedisClient();
+    const multi = client.multi();
 
-    await writeLeaderboard(currentLeaderboard);
+    // Store the full entry in a hash
+    multi.hSet(`${LEADERBOARD_ENTRY_HASH_PREFIX}${newEntry.id}`, {
+      id: newEntry.id,
+      name: newEntry.name,
+      score: newEntry.score.toString(), // Store score as string in hash
+      date: newEntry.date,
+    });
+
+    // Add to sorted set (score, member_id)
+    multi.zAdd(LEADERBOARD_KEY, { score: newEntry.score, value: newEntry.id });
+
+    // Trim the sorted set to keep only the top MAX_LEADERBOARD_ENTRIES
+    // Removes elements from rank 0 (lowest score) up to -(MAX_LEADERBOARD_ENTRIES + 1)
+    // This keeps the MAX_LEADERBOARD_ENTRIES highest scores.
+    multi.zRemRangeByRank(LEADERBOARD_KEY, 0, -MAX_LEADERBOARD_ENTRIES -1);
     
-    // Return the updated (and sorted/trimmed by readLeaderboard again to be sure) leaderboard
-    const updatedLeaderboard = await readLeaderboard(); 
-    console.log('[API/Leaderboard] POST: Returning updated leaderboard data after write. Size:', updatedLeaderboard.length, updatedLeaderboard.slice(0,3));
+    // Additionally, if an entry was removed from the sorted set, its hash should ideally be deleted.
+    // This is more complex to do atomically without Lua scripts.
+    // For simplicity now, hashes might persist for entries no longer in top N.
+
+    await multi.exec();
+    console.log('[API/Leaderboard] (Redis) POST: Successfully executed Redis transaction for new entry.');
+    
+    // Fetch and return the updated leaderboard
+    const updatedEntryIds = await client.zRangeWithScores(LEADERBOARD_KEY, 0, MAX_LEADERBOARD_ENTRIES - 1, { REV: true });
+    if (updatedEntryIds.length === 0) {
+      return NextResponse.json([], { status: 201 });
+    }
+    const fetchMulti = client.multi();
+    updatedEntryIds.forEach(entry => {
+      fetchMulti.hGetAll(`${LEADERBOARD_ENTRY_HASH_PREFIX}${entry.value}`);
+    });
+    const updatedResults = await fetchMulti.exec() as Record<string, string>[];
+    const updatedLeaderboard: LeaderboardEntry[] = updatedResults.map((entryData, index) => {
+       if (!entryData || Object.keys(entryData).length === 0) return null;
+      return {
+        id: entryData.id,
+        name: entryData.name,
+        score: parseInt(entryData.score, 10),
+        date: entryData.date,
+      };
+    }).filter(entry => entry !== null) as LeaderboardEntry[];
+
+    console.log('[API/Leaderboard] (Redis) POST: Returning updated leaderboard data. Size:', updatedLeaderboard.length, updatedLeaderboard.slice(0,3));
     return NextResponse.json(updatedLeaderboard, { status: 201 });
 
-  } catch (error) {
-    console.error('[API/Leaderboard] POST: Failed to update leaderboard:', error);
-    return NextResponse.json({ message: 'Failed to update leaderboard in file.' }, { status: 500 });
+  } catch (error: any) {
+    console.error('[API/Leaderboard] (Redis) POST: Failed to update leaderboard:', error.message, error.stack);
+    return NextResponse.json({ message: 'Failed to update leaderboard in Redis.' }, { status: 500 });
   }
 }
