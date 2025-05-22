@@ -31,7 +31,7 @@ import { useRouter } from 'next/navigation'; // For App Router
 type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over' | 'prompting_username' | 'viewing_leaderboard';
 
 const MAX_QUESTION_QUEUE_SIZE = 2;
-const MIN_QUESTION_QUEUE_SIZE = 1; 
+const MIN_QUESTION_QUEUE_SIZE = 1;
 const USERNAME_STORAGE_KEY = 'ecoRoamUsername';
 
 const AP_MACRO_TOPICS = [
@@ -88,12 +88,12 @@ const AP_MACRO_TOPICS = [
 ];
 
 const ECONOMIC_CONDITIONS = [
-    "recessionary gap", 
-    "inflationary gap", 
-    "stagflation", 
-    "full employment with rising inflation", 
-    "cyclical unemployment", 
-    "demand-pull inflation", 
+    "recessionary gap",
+    "inflationary gap",
+    "stagflation",
+    "full employment with rising inflation",
+    "cyclical unemployment",
+    "demand-pull inflation",
     "cost-push inflation",
     "economic boom with low unemployment",
     "deflationary pressures",
@@ -121,12 +121,17 @@ export default function EcoRoamPage() {
   const [causeEffectQuestionQueue, setCauseEffectQuestionQueue] = useState<BaseQuestionOutput[]>([]);
   const [isFetchingTrivia, setIsFetchingTrivia] = useState(false);
   const [isFetchingCauseEffect, setIsFetchingCauseEffect] = useState(false);
-  
+
   const pressedKeys = useRef<Set<string>>(new Set());
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastMonsterSpawnTime = useRef<number>(0);
   const isProcessingHit = useRef<boolean>(false);
   const router = useRouter();
+  const gameStatusRef = useRef(gameStatus);
+
+  useEffect(() => {
+    gameStatusRef.current = gameStatus;
+  }, [gameStatus]);
 
 
   const fetchTriviaQuestions = useCallback(async (count: number) => {
@@ -142,10 +147,10 @@ export default function EcoRoamPage() {
       const newQuestions = results
         .filter(r => r.status === 'fulfilled')
         .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
-      
+
       setTriviaQuestionQueue(prev => {
         const combined = [...prev, ...newQuestions];
-        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); 
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE);
       });
     } catch (error) {
       console.error("Error fetching trivia questions:", error);
@@ -167,10 +172,10 @@ export default function EcoRoamPage() {
       const newQuestions = results
         .filter(r => r.status === 'fulfilled')
         .map(r => (r as PromiseFulfilledResult<BaseQuestionOutput>).value);
-      
+
       setCauseEffectQuestionQueue(prev => {
         const combined = [...prev, ...newQuestions];
-        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); 
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE);
       });
     } catch (error) {
       console.error("Error fetching cause-effect questions:", error);
@@ -187,10 +192,10 @@ export default function EcoRoamPage() {
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
         const spawnPadding = MONSTER_SIZE * 2;
         const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
-        const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding; 
-        newMonstersList.push({ 
-          id: `m-${Date.now()}-${Math.random()}`, 
-          type, x, y, 
+        const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
+        newMonstersList.push({
+          id: `m-${Date.now()}-${Math.random()}`,
+          type, x, y,
           nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM + MONSTER_SHOOT_INTERVAL_BASE),
           isPreparingToShoot: false,
         });
@@ -198,7 +203,7 @@ export default function EcoRoamPage() {
       return [...prevMonsters, ...newMonstersList];
     });
   }, []);
-  
+
   const resetGameState = useCallback(() => {
     setPlayerState({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
     setMonsters([]);
@@ -209,16 +214,16 @@ export default function EcoRoamPage() {
     setMonstersKilled(0);
     setCurrentQuestionContext(null);
     setGameOverData(null);
-    setIsPlayerHit(false); 
+    setIsPlayerHit(false);
     pressedKeys.current.clear();
     lastMonsterSpawnTime.current = Date.now();
     isProcessingHit.current = false;
-    
+
     setTriviaQuestionQueue([]);
     setCauseEffectQuestionQueue([]);
-    setIsFetchingTrivia(false); 
+    setIsFetchingTrivia(false);
     setIsFetchingCauseEffect(false);
-    
+
     // Fetch initial questions when game state is reset (usually on start game)
     fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
     fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
@@ -245,7 +250,7 @@ export default function EcoRoamPage() {
       setGameStatus('game_over');
     }
   };
-  
+
   const submitScoreToLeaderboard = async (name: string, currentScore: number, currentGameOverData: GameOverData) => {
     try {
       const response = await fetch('/api/leaderboard', {
@@ -275,31 +280,31 @@ export default function EcoRoamPage() {
 
 
   const handleProjectileHit = useCallback(async (projectile: ProjectileInstance) => {
-    if (isProcessingHit.current || gameStatus === 'question' || gameStatus === 'game_over' || gameStatus === 'prompting_username') {
-      return; 
+    if (isProcessingHit.current || gameStatusRef.current === 'question' || gameStatusRef.current === 'game_over' || gameStatusRef.current === 'prompting_username') {
+      return;
     }
     isProcessingHit.current = true;
     setIsPlayerHit(true); // Turn on red flash
     setGameStatus('question'); // Freeze game immediately
 
     setTimeout(async () => {
-      setIsPlayerHit(false); // Turn off red flash right before showing question
+      setIsPlayerHit(false); // Turn off red flash right before showing question modal
 
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
-      
+
       if (monsterType === MonsterType.TRIVIA) {
         questionData = triviaQuestionQueue[0];
         if (questionData) {
           setTriviaQuestionQueue(prev => prev.slice(1));
         }
-      } else { 
+      } else {
         questionData = causeEffectQuestionQueue[0];
         if (questionData) {
           setCauseEffectQuestionQueue(prev => prev.slice(1));
         }
       }
-      
+
       if (monsterType === MonsterType.TRIVIA && triviaQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
           fetchTriviaQuestions(1);
       } else if (monsterType === MonsterType.CAUSE_EFFECT && causeEffectQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
@@ -312,18 +317,18 @@ export default function EcoRoamPage() {
           if (monsterType === MonsterType.TRIVIA) {
             const randomTopic = AP_MACRO_TOPICS[Math.floor(Math.random() * AP_MACRO_TOPICS.length)];
             questionData = await generateEconomicsQuestion({ topic: randomTopic });
-          } else { 
+          } else {
             const randomCondition = ECONOMIC_CONDITIONS[Math.floor(Math.random() * ECONOMIC_CONDITIONS.length)];
             questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
           }
         } catch (error) {
           console.error("Error generating question on demand:", error);
           handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "AI Error generating question.", correctAnswerText: "N/A"});
-          isProcessingHit.current = false; 
-          return; 
+          isProcessingHit.current = false;
+          return;
         }
       }
-      
+
       if (questionData) {
         setCurrentQuestionContext({
           monsterId: projectile.monsterId,
@@ -334,26 +339,26 @@ export default function EcoRoamPage() {
       } else {
         console.error("Failed to obtain a question for the player.");
         handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "System Error: No question available.", correctAnswerText: "N/A"});
-        isProcessingHit.current = false; 
+        isProcessingHit.current = false;
       }
       // Note: isProcessingHit.current is reset in handleAnswer or if an error path is taken above.
       // Game status remains 'question' until handleAnswer is called.
-    }, 1000); 
+    }, 1000);
 
-  }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
+  }, [triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
   useEffect(() => {
     if (gameStatus !== 'question') {
-        isProcessingHit.current = false; 
+        isProcessingHit.current = false;
     }
     if (gameStatus === 'start_screen' || gameStatus === 'playing') {
-        setIsPlayerHit(false); 
+        setIsPlayerHit(false);
     }
 }, [gameStatus]);
 
 
   const startGame = () => {
-    resetGameState(); 
+    resetGameState();
     setGameStatus('playing');
   };
 
@@ -393,15 +398,15 @@ export default function EcoRoamPage() {
 
       setMonsters(prevMonsters => prevMonsters.map(monster => {
         const angleToPlayer = Math.atan2(playerState.y - monster.y, playerState.x - monster.x);
-        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); 
+        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3);
         const moveAngle = angleToPlayer + randomAngleOffset;
-        
+
         let newMonsterX = monster.x + Math.cos(moveAngle) * MONSTER_SPEED;
         let newMonsterY = monster.y + Math.sin(moveAngle) * MONSTER_SPEED;
 
         newMonsterX = Math.max(0, Math.min(WORLD_WIDTH - MONSTER_SIZE, newMonsterX));
         newMonsterY = Math.max(0, Math.min(WORLD_HEIGHT - MONSTER_SIZE, newMonsterY));
-        
+
         let updatedMonster = { ...monster, x: newMonsterX, y: newMonsterY };
 
         if (!updatedMonster.isPreparingToShoot && now >= updatedMonster.nextShotDecisionTime - MONSTER_CHARGE_DURATION) {
@@ -425,7 +430,7 @@ export default function EcoRoamPage() {
       }));
 
       setProjectiles(prevProj => prevProj.filter(p => {
-        if (!p) return false; 
+        if (!p) return false;
         p.x += PROJECTILE_SPEED * Math.cos(p.angle);
         p.y += PROJECTILE_SPEED * Math.sin(p.angle);
 
@@ -435,10 +440,10 @@ export default function EcoRoamPage() {
         const dy = p.y - (playerState.y + PLAYER_SIZE / 2);
         const distance = Math.sqrt(dx * dx + dy * dy);
         if (distance < PROJECTILE_SIZE / 2 + PLAYER_SIZE / 2) {
-          if (!isProcessingHit.current) { 
+          if (!isProcessingHit.current) {
             handleProjectileHit(p);
           }
-          return false; 
+          return false;
         }
         return true;
       }));
@@ -455,12 +460,12 @@ export default function EcoRoamPage() {
 
         for (const p of updatedProjectiles) {
           if (p.x < 0 || p.x > WORLD_WIDTH || p.y < 0 || p.y > WORLD_HEIGHT) {
-            continue; 
+            continue;
           }
 
           let hit = false;
           for (const monster of monsters) {
-            if (hitMonsterIds.has(monster.id)) continue; 
+            if (hitMonsterIds.has(monster.id)) continue;
 
             const dx = p.x - (monster.x + MONSTER_SIZE / 2);
             const dy = p.y - (monster.y + MONSTER_SIZE / 2);
@@ -469,15 +474,15 @@ export default function EcoRoamPage() {
             if (distance < PLAYER_PROJECTILE_SIZE / 2 + MONSTER_SIZE / 2) {
               hit = true;
               hitMonsterIds.add(monster.id);
-              setScore(prev => prev + 25); 
-              break; 
+              setScore(prev => prev + 25);
+              break;
             }
           }
           if (!hit) {
             remainingProjectiles.push(p);
           }
         }
-        
+
         if (hitMonsterIds.size > 0) {
           setMonsters(prev => {
             const newMonstersList = prev.filter(m => !hitMonsterIds.has(m.id));
@@ -504,9 +509,9 @@ export default function EcoRoamPage() {
 
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
-    
-    isProcessingHit.current = false; 
-    setIsPlayerHit(false); 
+
+    isProcessingHit.current = false;
+    setIsPlayerHit(false);
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -516,20 +521,20 @@ export default function EcoRoamPage() {
         }
         return prev
           .filter(m => m.id !== currentQuestionContext.monsterId)
-          .map(monster => ({ 
+          .map(monster => ({ // Reset remaining monsters' shooting state
             ...monster,
             nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
             isPreparingToShoot: false,
           }));
       });
-      setScore(prev => prev + 50); 
-      setProjectiles([]); 
+      setScore(prev => prev + 50);
+      setProjectiles([]); // Clear monster projectiles
       setCurrentQuestionContext(null);
-      setGameStatus('playing'); 
+      setGameStatus('playing');
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
-      setCurrentQuestionContext(null); 
+      setCurrentQuestionContext(null);
       handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: qData.question, correctAnswerText, explanationText: qData.explanation });
     }
   };
@@ -548,7 +553,7 @@ export default function EcoRoamPage() {
 
     setPlayerProjectiles(prev => [...prev, {
       id: `pp-${Date.now()}-${Math.random()}`,
-      x: playerState.x + PLAYER_SIZE / 2, 
+      x: playerState.x + PLAYER_SIZE / 2,
       y: playerState.y + PLAYER_SIZE / 2,
       angle,
     }]);
@@ -558,24 +563,27 @@ export default function EcoRoamPage() {
     if (gameStatus !== 'playing') return;
     const interval = setInterval(() => {
       setScore(prev => prev + SCORE_INCREMENT_AMOUNT);
-      setTimeSurvived(prev => prev + 1); 
+      setTimeSurvived(prev => prev + 1);
     }, SCORE_INCREMENT_INTERVAL);
     return () => clearInterval(interval);
   }, [gameStatus]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (typeof e.key !== 'string') return; // Guard for undefined e.key
+      if (gameStatusRef.current !== 'playing') return; // Only process if game is playing
+
+      if (typeof e.key !== 'string') return;
 
       let canonicalKeyPressed: string | undefined = undefined;
       const keyLower = e.key.toLowerCase();
 
-      for (const bindingValue of Object.values(KEY_BINDINGS)) {
-        if (bindingValue.length === 1 && bindingValue.toLowerCase() === keyLower) {
+      for (const bindingKey in KEY_BINDINGS) {
+        const bindingValue = KEY_BINDINGS[bindingKey as keyof typeof KEY_BINDINGS];
+        if (bindingValue.length === 1 && bindingValue.toLowerCase() === keyLower) { // For 'w', 'a', 's', 'd'
           canonicalKeyPressed = bindingValue;
           break;
         }
-        if (bindingValue.length > 1 && bindingValue === e.key) {
+        if (bindingValue.length > 1 && bindingValue === e.key) { // For 'ArrowUp', etc.
           canonicalKeyPressed = bindingValue;
           break;
         }
@@ -588,19 +596,22 @@ export default function EcoRoamPage() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (typeof e.key !== 'string') return; // Guard for undefined e.key
+      if (gameStatusRef.current !== 'playing') return; // Only process if game is playing
+
+      if (typeof e.key !== 'string') return;
 
       let canonicalReleasedKey: string | undefined = undefined;
       const keyLower = e.key.toLowerCase();
 
-      for (const bindingValue of Object.values(KEY_BINDINGS)) {
+      for (const bindingKey in KEY_BINDINGS) {
+        const bindingValue = KEY_BINDINGS[bindingKey as keyof typeof KEY_BINDINGS];
         if (bindingValue.length === 1 && bindingValue.toLowerCase() === keyLower) {
-          canonicalReleasedKey = bindingValue;
-          break;
+            canonicalReleasedKey = bindingValue;
+            break;
         }
         if (bindingValue.length > 1 && bindingValue === e.key) {
-          canonicalReleasedKey = bindingValue;
-          break;
+            canonicalReleasedKey = bindingValue;
+            break;
         }
       }
 
@@ -615,8 +626,8 @@ export default function EcoRoamPage() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
-  
+  }, []); // Empty dependency array is correct here as gameStatusRef.current handles the dynamic check
+
   useEffect(() => {
     if (gameStatus === 'playing' && monsters.length === 0 && MAX_MONSTERS > 0) {
        setTimeout(() => spawnMonster(Math.min(MAX_MONSTERS, Math.floor(MAX_MONSTERS / 2) || 1 )), 100);
@@ -628,11 +639,11 @@ export default function EcoRoamPage() {
   const worldOffsetY = VIEWPORT_HEIGHT / 2 - playerState.y;
 
   const gameAreaDynamicStyle = {
-    backgroundPositionX: `${worldOffsetX % 32}px`, 
+    backgroundPositionX: `${worldOffsetX % 32}px`,
     backgroundPositionY: `${worldOffsetY % 32}px`,
   };
 
-  const boundaryThickness = 4; 
+  const boundaryThickness = 4;
 
 
   if (gameStatus === 'start_screen') {
@@ -644,9 +655,9 @@ export default function EcoRoamPage() {
           <Button onClick={startGame} size="lg" className="px-12 py-6 text-2xl bg-primary hover:bg-primary/90 text-primary-foreground">
             Start Game
           </Button>
-          <Button 
-            onClick={() => router.push('/leaderboard')} 
-            size="lg" 
+          <Button
+            onClick={() => router.push('/leaderboard')}
+            size="lg"
             variant="outline"
             className="px-12 py-6 text-2xl"
           >
@@ -658,7 +669,7 @@ export default function EcoRoamPage() {
       </div>
     );
   }
-  
+
   const displayedTimeSurvived = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
 
   return (
@@ -666,18 +677,18 @@ export default function EcoRoamPage() {
       <div
         ref={gameAreaRef}
         className="relative pixelated-ground shadow-2xl overflow-hidden border-4 border-border"
-        style={{ 
-          width: VIEWPORT_WIDTH, 
-          height: VIEWPORT_HEIGHT, 
+        style={{
+          width: VIEWPORT_WIDTH,
+          height: VIEWPORT_HEIGHT,
           imageRendering: 'pixelated',
-          ...gameAreaDynamicStyle 
+          ...gameAreaDynamicStyle
         }}
         onClick={handleGameAreaClick}
       >
         {isPlayerHit && (
-          <div 
+          <div
             className="absolute inset-0 bg-destructive/40 pointer-events-none"
-            style={{ zIndex: 500 }} 
+            style={{ zIndex: 500 }}
           ></div>
         )}
         <div
@@ -723,7 +734,7 @@ export default function EcoRoamPage() {
         </div>
 
         <PlayerComponent />
-        
+
         <ScoreDisplay score={score} timeSurvived={displayedTimeSurvived} monstersKilled={monstersKilled} />
       </div>
 
