@@ -72,7 +72,7 @@ export default function EcoRoamPage() {
       
       setTriviaQuestionQueue(prev => {
         const combined = [...prev, ...newQuestions];
-        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); // Ensure queue doesn't exceed max size
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); 
       });
     } catch (error) {
       console.error("Error fetching trivia questions:", error);
@@ -98,7 +98,7 @@ export default function EcoRoamPage() {
       
       setCauseEffectQuestionQueue(prev => {
         const combined = [...prev, ...newQuestions];
-        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); // Ensure queue doesn't exceed max size
+        return combined.slice(-MAX_QUESTION_QUEUE_SIZE); 
       });
     } catch (error) {
       console.error("Error fetching cause-effect questions:", error);
@@ -114,7 +114,6 @@ export default function EcoRoamPage() {
         if (prevMonsters.length + newMonsters.length >= MAX_MONSTERS) break;
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
         const spawnPadding = MONSTER_SIZE * 2;
-        // Ensure monsters spawn within world boundaries, avoiding edges.
         const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
         const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding; 
         newMonsters.push({ 
@@ -138,7 +137,7 @@ export default function EcoRoamPage() {
     setMonstersKilled(0);
     setCurrentQuestionContext(null);
     setGameOverData(null);
-    setIsPlayerHit(false);
+    setIsPlayerHit(false); // Reset player hit state
     pressedKeys.current.clear();
     lastMonsterSpawnTime.current = Date.now();
     isProcessingHit.current = false;
@@ -148,7 +147,6 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false); 
     setIsFetchingCauseEffect(false);
 
-    // Initial fill of question queues
     fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
     fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     
@@ -162,13 +160,11 @@ export default function EcoRoamPage() {
     }
     isProcessingHit.current = true;
 
-    setIsPlayerHit(true); // Immediate flash
-    setTimeout(() => setIsPlayerHit(false), 300); 
+    setIsPlayerHit(true); // Activate red flash
+    setGameStatus('question'); // Change status immediately to pause game loop updates
 
-    // Introduce 1-second delay before showing the question
+    // 1-second delay before showing the question modal
     setTimeout(async () => {
-      setGameStatus('question'); 
-
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
       
@@ -184,13 +180,11 @@ export default function EcoRoamPage() {
         }
       }
       
-      // Fetch replacement questions immediately after one is used.
       if (monsterType === MonsterType.TRIVIA && triviaQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
           fetchTriviaQuestions(1);
       } else if (monsterType === MonsterType.CAUSE_EFFECT && causeEffectQuestionQueue.length -1 < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
           fetchCauseEffectQuestions(1);
       }
-
 
       if (!questionData) {
         console.warn(`Queue empty for ${monsterType}, fetching on demand.`);
@@ -199,7 +193,7 @@ export default function EcoRoamPage() {
             const topics = ["Fiscal Policy", "Monetary Policy", "Supply and Demand", "GDP", "Inflation", "Market Structures", "International Trade"];
             const randomTopic = topics[Math.floor(Math.random() * topics.length)];
             questionData = await generateEconomicsQuestion({ topic: randomTopic });
-          } else { // MonsterType.CAUSE_EFFECT
+          } else { 
             const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation"];
             const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
             questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
@@ -209,6 +203,8 @@ export default function EcoRoamPage() {
           const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
           setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
           setGameStatus('game_over'); 
+          // isProcessingHit will be reset by useEffect watching gameStatus
+          // setIsPlayerHit will be reset by handleAnswer or resetGameState
           return; 
         }
       }
@@ -220,19 +216,27 @@ export default function EcoRoamPage() {
           questionData,
           monsterType: projectile.monsterType,
         });
+        // Modal will appear. gameStatus is already 'question'.
+        // Red flash (isPlayerHit) remains true.
       } else {
         console.error("Failed to obtain a question for the player.");
         const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
         setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
         setGameStatus('game_over');
       }
-    }, 1000); // 1-second delay
+    }, 1000); 
 
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
   useEffect(() => {
     if (gameStatus !== 'question') {
       isProcessingHit.current = false;
+      // If game is not in 'question' state (e.g. playing, game_over after question, start_screen),
+      // isPlayerHit should be false, typically handled by handleAnswer or resetGameState.
+      // This ensures if we jump to game_over directly without handleAnswer, flash is off.
+      if(gameStatus === 'game_over' || gameStatus === 'start_screen') {
+        setIsPlayerHit(false);
+      }
     }
   }, [gameStatus]);
 
@@ -241,7 +245,6 @@ export default function EcoRoamPage() {
     setGameStatus('playing');
   };
 
-  // Effect for maintaining trivia question queue
   useEffect(() => {
     if ((gameStatus === 'playing' || gameStatus === 'start_screen') && triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
         const numToFetch = MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length;
@@ -249,7 +252,6 @@ export default function EcoRoamPage() {
     }
   }, [triviaQuestionQueue.length, isFetchingTrivia, gameStatus, fetchTriviaQuestions]);
 
-  // Effect for maintaining cause-effect question queue
   useEffect(() => {
     if ((gameStatus === 'playing' || gameStatus === 'start_screen') && causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
          const numToFetch = MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length;
@@ -258,7 +260,6 @@ export default function EcoRoamPage() {
   }, [causeEffectQuestionQueue.length, isFetchingCauseEffect, gameStatus, fetchCauseEffectQuestions]);
 
 
-  // Game Loop
   useEffect(() => {
     if (gameStatus !== 'playing') return;
 
@@ -280,7 +281,7 @@ export default function EcoRoamPage() {
 
       setMonsters(prevMonsters => prevMonsters.map(monster => {
         const angleToPlayer = Math.atan2(playerState.y - monster.y, playerState.x - monster.x);
-        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); // Random up to 30 degrees deviation
+        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); 
         const moveAngle = angleToPlayer + randomAngleOffset;
         
         let newMonsterX = monster.x + Math.cos(moveAngle) * MONSTER_SPEED;
@@ -353,7 +354,7 @@ export default function EcoRoamPage() {
             if (distance < PLAYER_PROJECTILE_SIZE / 2 + MONSTER_SIZE / 2) {
               hit = true;
               hitMonsterIds.add(monster.id);
-              setScore(prev => prev + 25); // Monster kill score update
+              setScore(prev => prev + 25); 
               break; 
             }
           }
@@ -389,6 +390,8 @@ export default function EcoRoamPage() {
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
 
+    setIsPlayerHit(false); // Turn off red flash when answer is submitted
+
     if (isCorrect) {
       setMonsters(prev => {
         const monsterExists = prev.some(m => m.id === currentQuestionContext.monsterId);
@@ -400,7 +403,7 @@ export default function EcoRoamPage() {
       });
       setScore(prev => prev + 50); 
       setCurrentQuestionContext(null);
-      setGameStatus('playing');
+      setGameStatus('playing'); // Resume game
     } else {
       const qData = currentQuestionContext.questionData;
       const correctAnswerText = qData.choices[qData.correctAnswerIndex];
@@ -409,7 +412,8 @@ export default function EcoRoamPage() {
         score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled,
         failedQuestion: { questionText: qData.question, correctAnswerText, explanationText: qData.explanation }
       });
-      setGameStatus('game_over');
+      setCurrentQuestionContext(null); // Clear question context for game over
+      setGameStatus('game_over'); // Go to game over screen
     }
   };
 
@@ -437,7 +441,7 @@ export default function EcoRoamPage() {
     if (gameStatus !== 'playing') return;
     const interval = setInterval(() => {
       setScore(prev => prev + SCORE_INCREMENT_AMOUNT);
-      setTimeSurvived(prev => prev + 1); // timeSurvived increments by 1 unit (representing 100ms)
+      setTimeSurvived(prev => prev + 1); 
     }, SCORE_INCREMENT_INTERVAL);
     return () => clearInterval(interval);
   }, [gameStatus]);
@@ -478,7 +482,7 @@ export default function EcoRoamPage() {
     backgroundPositionY: `${worldOffsetY % 32}px`,
   };
 
-  const boundaryThickness = 4; // px
+  const boundaryThickness = 4; 
 
 
   if (gameStatus === 'start_screen') {
@@ -494,7 +498,6 @@ export default function EcoRoamPage() {
     );
   }
   
-  // Convert timeSurvived (in 100ms units) to seconds for display
   const displayedTimeSurvived = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
 
   return (
@@ -513,7 +516,7 @@ export default function EcoRoamPage() {
         {isPlayerHit && (
           <div 
             className="absolute inset-0 bg-destructive/40 pointer-events-none"
-            style={{ zIndex: 5 }} 
+            style={{ zIndex: 500 }} // Ensure flash is on top of game elements but below modal
           ></div>
         )}
         <div
