@@ -1,8 +1,8 @@
 // src/config/game.ts
-export const PLAYER_SIZE = 20;
+export const PLAYER_SIZE = 25; // Increased by 25% from 20
 export const PLAYER_SPEED = 4; // pixels per frame update
 
-export const MONSTER_SIZE = 20;
+export const MONSTER_SIZE = 25; // Increased by 25% from 20
 export const MONSTER_SPEED = 1.5; // pixels per frame update for monsters
 export const MONSTER_SHOOT_INTERVAL_BASE = 3000; // ms (min delay: 3 seconds)
 export const MONSTER_SHOOT_INTERVAL_RANDOM = 5000; // ms (max additional delay: 5 seconds, total 3-8 seconds)
@@ -11,10 +11,10 @@ export const MONSTER_SPAWN_INTERVAL = 4000; // ms, how often to try spawning a n
 export const MONSTER_CHARGE_DURATION = 1000; // ms, how long monster charges before shooting
 
 export const PROJECTILE_SIZE = 8; // Monster projectile size
-export const PROJECTILE_SPEED = 6; // Monster projectile speed (was 5)
+export const PROJECTILE_SPEED = 7.2; // Monster projectile speed (was 6, increased by 20%)
 
 export const PLAYER_PROJECTILE_SIZE = 6;
-export const PLAYER_PROJECTILE_SPEED = 8.4; // Player projectile speed (was 7)
+export const PLAYER_PROJECTILE_SPEED = 10.08; // Player projectile speed (was 8.4, increased by 20%)
 
 // Define viewport dimensions (the visible part of the game)
 export const VIEWPORT_WIDTH = 800;
