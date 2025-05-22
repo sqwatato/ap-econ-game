@@ -51,7 +51,50 @@ const AP_MACRO_TOPICS = [
   "Economic Growth (Determinants, Productivity)",
   "International Trade and Finance (Comparative Advantage, Trade Barriers)",
   "Exchange Rates (Appreciation, Depreciation)",
-  "Balance of Payments (Current Account, Capital and Financial Account)"
+  "Balance of Payments (Current Account, Capital and Financial Account)",
+  "Business Cycles",
+  "Circular Flow Model",
+  "National Income Accounting",
+  "Consumer Price Index (CPI) and Inflation Calculation",
+  "GDP Deflator vs. CPI",
+  "Costs of Inflation (Shoe-leather, Menu Costs, etc.)",
+  "Types of Unemployment (Frictional, Structural, Cyclical)",
+  "Okun's Law",
+  "Classical vs. Keynesian Economics",
+  "Marginal Propensity to Consume (MPC) and Save (MPS)",
+  "Expenditure Multiplier and Tax Multiplier",
+  "Automatic Stabilizers",
+  "Government Debt and Deficits",
+  "Crowding Out Effect",
+  "Functions of Money",
+  "Measures of Money Supply (M1, M2)",
+  "Bank Balance Sheets and Money Creation",
+  "Reserve Requirement and Money Multiplier",
+  "Discount Rate and Federal Funds Rate",
+  "Open Market Operations",
+  "Equation of Exchange (MV=PQ)",
+  "Quantity Theory of Money",
+  "Nominal vs. Real Interest Rates",
+  "Loanable Funds Market (Supply and Demand for Loanable Funds)",
+  "Expectations and Macroeconomic Policy",
+  "Supply Shocks",
+  "Trade Balance (Exports vs. Imports)",
+  "Foreign Exchange Market (Supply and Demand for Currencies)",
+  "Factors Affecting Exchange Rates",
+  "Effects of Exchange Rate Changes on Trade"
+];
+
+const ECONOMIC_CONDITIONS = [
+    "recessionary gap", 
+    "inflationary gap", 
+    "stagflation", 
+    "full employment with rising inflation", 
+    "cyclical unemployment", 
+    "demand-pull inflation", 
+    "cost-push inflation",
+    "economic boom with low unemployment",
+    "deflationary pressures",
+    "liquidity trap"
 ];
 
 
@@ -109,9 +152,8 @@ export default function EcoRoamPage() {
     setIsFetchingCauseEffect(true);
     try {
       const promises = [];
-      const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation", "cyclical unemployment", "demand-pull inflation", "cost-push inflation"];
       for (let i = 0; i < count; i++) {
-        const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+        const randomCondition = ECONOMIC_CONDITIONS[Math.floor(Math.random() * ECONOMIC_CONDITIONS.length)];
         promises.push(generateCauseEffectQuestion({ economicCondition: randomCondition }));
       }
       const results = await Promise.allSettled(promises);
@@ -132,21 +174,21 @@ export default function EcoRoamPage() {
 
   const spawnMonster = useCallback((count = 1) => {
     setMonsters(prevMonsters => {
-      const newMonsters: MonsterInstance[] = [];
+      const newMonstersList: MonsterInstance[] = [];
       for (let i = 0; i < count; i++) {
-        if (prevMonsters.length + newMonsters.length >= MAX_MONSTERS) break;
+        if (prevMonsters.length + newMonstersList.length >= MAX_MONSTERS) break;
         const type = Math.random() < 0.5 ? MonsterType.TRIVIA : MonsterType.CAUSE_EFFECT;
         const spawnPadding = MONSTER_SIZE * 2;
         const x = Math.random() * (WORLD_WIDTH - MONSTER_SIZE - spawnPadding * 2) + spawnPadding;
         const y = Math.random() * (WORLD_HEIGHT - MONSTER_SIZE - spawnPadding * 2) + spawnPadding; 
-        newMonsters.push({ 
+        newMonstersList.push({ 
           id: `m-${Date.now()}-${Math.random()}`, 
           type, x, y, 
           nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM + MONSTER_SHOOT_INTERVAL_BASE),
           isPreparingToShoot: false,
         });
       }
-      return [...prevMonsters, ...newMonsters];
+      return [...prevMonsters, ...newMonstersList];
     });
   }, []);
   
@@ -170,6 +212,7 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false); 
     setIsFetchingCauseEffect(false);
 
+    // Fetch initial questions when game state is reset (i.e., when "Start Game" is clicked)
     fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
     fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     
@@ -218,8 +261,7 @@ export default function EcoRoamPage() {
             const randomTopic = AP_MACRO_TOPICS[Math.floor(Math.random() * AP_MACRO_TOPICS.length)];
             questionData = await generateEconomicsQuestion({ topic: randomTopic });
           } else { 
-            const conditions = ["recessionary gap", "inflationary gap", "stagflation", "full employment with rising inflation", "cyclical unemployment", "demand-pull inflation", "cost-push inflation"];
-            const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
+            const randomCondition = ECONOMIC_CONDITIONS[Math.floor(Math.random() * ECONOMIC_CONDITIONS.length)];
             questionData = await generateCauseEffectQuestion({ economicCondition: randomCondition });
           }
         } catch (error) {
@@ -227,7 +269,7 @@ export default function EcoRoamPage() {
           const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
           setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "AI Error generating question.", correctAnswerText: "N/A"} });
           setGameStatus('game_over'); 
-          isProcessingHit.current = false; // Ensure this is reset on error
+          isProcessingHit.current = false; 
           return; 
         }
       }
@@ -244,9 +286,8 @@ export default function EcoRoamPage() {
         const currentTimeSurvivedInSeconds = Math.floor(timeSurvived * SCORE_INCREMENT_INTERVAL / 1000);
         setGameOverData({ score, timeSurvived: currentTimeSurvivedInSeconds, monstersKilled, failedQuestion: { questionText: "System Error: No question available.", correctAnswerText: "N/A"} });
         setGameStatus('game_over');
-        isProcessingHit.current = false; // Ensure this is reset on error
+        isProcessingHit.current = false; 
       }
-      // isProcessingHit will be reset either in handleAnswer or if the component unmounts/status changes
     }, 1000); 
 
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
@@ -254,8 +295,6 @@ export default function EcoRoamPage() {
   useEffect(() => {
     if (gameStatus !== 'question') {
       isProcessingHit.current = false;
-      // Turn off red flash if game transitions to something other than 'question' while hit was processing
-      // or when game over/start screen is active.
       if (gameStatus === 'game_over' || gameStatus === 'start_screen') {
         setIsPlayerHit(false); 
       }
@@ -268,14 +307,16 @@ export default function EcoRoamPage() {
   };
 
   useEffect(() => {
-    if ((gameStatus === 'playing' || gameStatus === 'start_screen') && triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
+    // Only try to top up the queue if the game is actively playing and queue is low
+    if (gameStatus === 'playing' && triviaQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingTrivia) {
         const numToFetch = MAX_QUESTION_QUEUE_SIZE - triviaQuestionQueue.length;
         if (numToFetch > 0) fetchTriviaQuestions(numToFetch);
     }
   }, [triviaQuestionQueue.length, isFetchingTrivia, gameStatus, fetchTriviaQuestions]);
 
   useEffect(() => {
-    if ((gameStatus === 'playing' || gameStatus === 'start_screen') && causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
+    // Only try to top up the queue if the game is actively playing and queue is low
+    if (gameStatus === 'playing' && causeEffectQuestionQueue.length < MIN_QUESTION_QUEUE_SIZE && !isFetchingCauseEffect) {
          const numToFetch = MAX_QUESTION_QUEUE_SIZE - causeEffectQuestionQueue.length;
          if (numToFetch > 0) fetchCauseEffectQuestions(numToFetch);
     }
@@ -335,7 +376,7 @@ export default function EcoRoamPage() {
       }));
 
       setProjectiles(prevProj => prevProj.filter(p => {
-        if (!p) return false; // Add a check for undefined projectile
+        if (!p) return false; 
         p.x += PROJECTILE_SPEED * Math.cos(p.angle);
         p.y += PROJECTILE_SPEED * Math.sin(p.angle);
 
@@ -345,7 +386,7 @@ export default function EcoRoamPage() {
         const dy = p.y - (playerState.y + PLAYER_SIZE / 2);
         const distance = Math.sqrt(dx * dx + dy * dy);
         if (distance < PROJECTILE_SIZE / 2 + PLAYER_SIZE / 2) {
-          if (!isProcessingHit.current) { // Ensure hit is processed only once
+          if (!isProcessingHit.current) { 
             handleProjectileHit(p);
           }
           return false; 
@@ -390,12 +431,12 @@ export default function EcoRoamPage() {
         
         if (hitMonsterIds.size > 0) {
           setMonsters(prev => {
-            const newMonsters = prev.filter(m => !hitMonsterIds.has(m.id));
-            const killedCount = prev.length - newMonsters.length;
+            const newMonstersList = prev.filter(m => !hitMonsterIds.has(m.id));
+            const killedCount = prev.length - newMonstersList.length;
             if (killedCount > 0) {
               setMonstersKilled(prevKilled => prevKilled + killedCount);
             }
-            return newMonsters;
+            return newMonstersList;
           });
         }
         return remainingProjectiles;
@@ -415,7 +456,6 @@ export default function EcoRoamPage() {
   const handleAnswer = (isCorrect: boolean) => {
     if (!currentQuestionContext) return;
 
-    setIsPlayerHit(false); 
     isProcessingHit.current = false; 
 
     if (isCorrect) {
@@ -423,17 +463,15 @@ export default function EcoRoamPage() {
         const monsterExists = prev.some(m => m.id === currentQuestionContext.monsterId);
         if (monsterExists) {
             setMonstersKilled(killed => killed + 1);
-             // Reset shoot timers for all remaining monsters
             return prev
               .filter(m => m.id !== currentQuestionContext.monsterId)
-              .map(monster => ({
+              .map(monster => ({ // Reset shoot timers for all remaining monsters
                 ...monster,
                 nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
                 isPreparingToShoot: false,
               }));
         }
-         // If monster was already killed by player projectile while question was up, just reset other monsters
-        return prev.map(monster => ({
+        return prev.map(monster => ({ // If monster was already killed, just reset other monsters
             ...monster,
             nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
             isPreparingToShoot: false,
