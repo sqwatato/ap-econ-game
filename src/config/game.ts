@@ -1,8 +1,8 @@
 // src/config/game.ts
-export const PLAYER_SIZE = 25; // Increased by 25% from 20
+export const PLAYER_SIZE = 30; // Updated from 25
 export const PLAYER_SPEED = 4; // pixels per frame update
 
-export const MONSTER_SIZE = 25; // Increased by 25% from 20
+export const MONSTER_SIZE = 30; // Updated from 25
 export const MONSTER_SPEED = 1.5; // pixels per frame update for monsters
 export const MONSTER_SHOOT_INTERVAL_BASE = 3000; // ms (min delay: 3 seconds)
 export const MONSTER_SHOOT_INTERVAL_RANDOM = 5000; // ms (max additional delay: 5 seconds, total 3-8 seconds)
