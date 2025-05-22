@@ -106,6 +106,31 @@ const ECONOMIC_CONDITIONS = [
     "a government budget surplus"
 ];
 
+// Helper function to shuffle choices and update the correct index
+function shuffleChoicesAndUpdateIndex(
+  choices: string[],
+  correctIndex: number
+): { newChoices: string[]; newCorrectIndex: number } {
+  const correctAnswerText = choices[correctIndex];
+
+  // Fisher-Yates shuffle algorithm for newChoices
+  const newChoices = [...choices];
+  for (let i = newChoices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newChoices[i], newChoices[j]] = [newChoices[j], newChoices[i]];
+  }
+
+  const newCorrectIndex = newChoices.indexOf(correctAnswerText);
+  if (newCorrectIndex === -1) {
+    // This should ideally not happen if the text is unique and present
+    console.error(
+      "Error: Correct answer text not found after shuffling. Defaulting to original index."
+    );
+    return { newChoices: choices, newCorrectIndex: correctIndex };
+  }
+
+  return { newChoices, newCorrectIndex };
+}
 
 export default function EcoRoamPage() {
   const [playerState, setPlayerState] = useState<PlayerState>({ x: INITIAL_PLAYER_X, y: INITIAL_PLAYER_Y });
@@ -227,7 +252,7 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false);
     setIsFetchingCauseEffect(false);
     
-    if (gameStatusRef.current === 'playing' || gameStatusRef.current === 'start_screen') { // Only fetch if starting or restarting
+    if (gameStatusRef.current === 'playing') { 
         fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
         fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     }
@@ -263,10 +288,13 @@ export default function EcoRoamPage() {
         const rank = updatedLeaderboard.findIndex(entry => entry.name === name && entry.score === currentScore) + 1;
         setGameOverData({ ...currentGameOverData, rank: rank > 0 ? rank : undefined });
       } else {
-        console.error('Failed to submit score:', await response.text());
+        console.error('Failed to submit score to leaderboard. Server responded with:', await response.text());
+        // Optionally, inform the user that submission failed
+        setGameOverData({ ...currentGameOverData, rank: undefined }); // Ensure rank is cleared if submission fails
       }
     } catch (error) {
-      console.error('Error submitting score:', error);
+      console.error('Error submitting score to leaderboard:', error);
+      setGameOverData({ ...currentGameOverData, rank: undefined });
     }
   };
 
@@ -274,6 +302,7 @@ export default function EcoRoamPage() {
     if (gameOverData) {
       await submitScoreToLeaderboard(name, gameOverData.score, gameOverData);
     }
+    // Set game status to game_over regardless of submission success to show game over screen
     setGameStatus('game_over');
   };
 
@@ -283,11 +312,11 @@ export default function EcoRoamPage() {
       return;
     }
     isProcessingHit.current = true;
-    setIsPlayerHit(true); // Turn on red flash
-    setGameStatus('question'); // Freeze game immediately
+    setIsPlayerHit(true); 
+    setGameStatus('question'); 
 
     setTimeout(async () => {
-      setIsPlayerHit(false); // Turn off red flash right before showing question modal
+      setIsPlayerHit(false); 
 
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
@@ -329,10 +358,19 @@ export default function EcoRoamPage() {
       }
 
       if (questionData) {
+        const { newChoices, newCorrectIndex } = shuffleChoicesAndUpdateIndex(
+          questionData.choices,
+          questionData.correctAnswerIndex
+        );
+        const finalQuestionData: BaseQuestionOutput = {
+          ...questionData,
+          choices: newChoices,
+          correctAnswerIndex: newCorrectIndex,
+        };
         setCurrentQuestionContext({
           monsterId: projectile.monsterId,
           projectileId: projectile.id,
-          questionData,
+          questionData: finalQuestionData,
           monsterType: projectile.monsterType,
         });
       } else {
@@ -348,15 +386,15 @@ export default function EcoRoamPage() {
     if (gameStatus !== 'question') {
         isProcessingHit.current = false;
     }
-    if (gameStatus === 'playing' || gameStatus === 'start_screen' ) {
+    if (gameStatus === 'playing') { // Only turn off flash if returning to 'playing' state
         setIsPlayerHit(false);
     }
 }, [gameStatus]);
 
 
   const startGame = () => {
-    setGameStatus('playing'); // Set status first
-    resetGameState(); // Then reset, which will trigger initial fetches if in 'playing' status
+    setGameStatus('playing'); 
+    resetGameState(); 
   };
 
   useEffect(() => {
@@ -375,7 +413,7 @@ export default function EcoRoamPage() {
 
 
   useEffect(() => {
-    if (gameStatus !== 'playing') return;
+    if (gameStatusRef.current !== 'playing') return;
 
     const gameLoop = requestAnimationFrame(() => {
       const now = Date.now();
@@ -508,7 +546,7 @@ export default function EcoRoamPage() {
     if (!currentQuestionContext) return;
 
     isProcessingHit.current = false;
-    setIsPlayerHit(false);
+    // setIsPlayerHit(false); // Flash is turned off before modal, keep it off
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -518,14 +556,14 @@ export default function EcoRoamPage() {
         }
         return prev
           .filter(m => m.id !== currentQuestionContext.monsterId)
-          .map(monster => ({ // Reset remaining monsters' shooting state
+          .map(monster => ({ 
             ...monster,
             nextShotDecisionTime: Date.now() + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE,
             isPreparingToShoot: false,
           }));
       });
       setScore(prev => prev + 50);
-      setProjectiles([]); // Clear monster projectiles
+      setProjectiles([]); 
       setCurrentQuestionContext(null);
       setGameStatus('playing');
     } else {
@@ -537,7 +575,7 @@ export default function EcoRoamPage() {
   };
 
   const handleGameAreaClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (gameStatus !== 'playing' || !gameAreaRef.current) return;
+    if (gameStatusRef.current !== 'playing' || !gameAreaRef.current) return;
 
     const rect = gameAreaRef.current.getBoundingClientRect();
     const clickXInViewport = event.clientX - rect.left;
@@ -557,17 +595,17 @@ export default function EcoRoamPage() {
   };
 
   useEffect(() => {
-    if (gameStatus !== 'playing') return;
+    if (gameStatusRef.current !== 'playing') return;
     const interval = setInterval(() => {
       setScore(prev => prev + SCORE_INCREMENT_AMOUNT);
       setTimeSurvived(prev => prev + 1);
     }, SCORE_INCREMENT_INTERVAL);
     return () => clearInterval(interval);
-  }, [gameStatus]);
+  }, [gameStatus]); // Re-run if gameStatus changes to 'playing'
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (gameStatusRef.current !== 'playing') return; // Only process if game is playing
+      if (gameStatusRef.current !== 'playing') return; 
 
       if (typeof e.key !== 'string') return;
 
@@ -576,11 +614,11 @@ export default function EcoRoamPage() {
 
       for (const bindingKey in KEY_BINDINGS) {
         const bindingValue = KEY_BINDINGS[bindingKey as keyof typeof KEY_BINDINGS];
-        if (bindingValue.length === 1 && bindingValue.toLowerCase() === keyLower) { // For 'w', 'a', 's', 'd'
+        if (bindingValue.length === 1 && bindingValue.toLowerCase() === keyLower) { 
           canonicalKeyPressed = bindingValue;
           break;
         }
-        if (bindingValue.length > 1 && bindingValue === e.key) { // For 'ArrowUp', etc.
+        if (bindingValue.length > 1 && bindingValue === e.key) { 
           canonicalKeyPressed = bindingValue;
           break;
         }
@@ -593,7 +631,7 @@ export default function EcoRoamPage() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (gameStatusRef.current !== 'playing') return; // Only process if game is playing
+      if (gameStatusRef.current !== 'playing') return; 
 
       if (typeof e.key !== 'string') return;
 
@@ -623,7 +661,7 @@ export default function EcoRoamPage() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []); // Empty dependency array is correct here as gameStatusRef.current handles the dynamic check
+  }, []); 
 
   useEffect(() => {
     if (gameStatus === 'playing' && monsters.length === 0 && MAX_MONSTERS > 0) {
