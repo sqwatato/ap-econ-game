@@ -13,7 +13,7 @@ import GameOverScreen from '@/components/game/GameOverScreen';
 import UsernamePromptModal from '@/components/game/UsernamePromptModal';
 import {
   PLAYER_SIZE, PLAYER_SPEED, MONSTER_SIZE, MONSTER_SPEED, MONSTER_SHOOT_INTERVAL_BASE, MONSTER_SHOOT_INTERVAL_RANDOM, MONSTER_CHARGE_DURATION,
-  MAX_MONSTERS, MONSTER_SPAWN_INTERVAL, PROJECTILE_SIZE, PROJECTILE_SPEED,
+  MAX_MONSTERS, MONSTER_SPAWN_INTERVAL, PROJECTILE_SIZE, PROJECTILE_SPEED, MONSTER_PROJECTILE_SPREAD_ANGLE,
   PLAYER_PROJECTILE_SIZE, PLAYER_PROJECTILE_SPEED,
   WORLD_WIDTH, WORLD_HEIGHT, VIEWPORT_WIDTH, VIEWPORT_HEIGHT,
   SCORE_INCREMENT_INTERVAL, SCORE_INCREMENT_AMOUNT, INITIAL_PLAYER_X, INITIAL_PLAYER_Y,
@@ -123,7 +123,7 @@ function shuffleChoicesAndUpdateIndex(
   const newCorrectIndex = newChoices.indexOf(correctAnswerText);
   if (newCorrectIndex === -1) {
     console.error(
-      "Error: Correct answer text not found after shuffling. Defaulting to original index."
+      "[Shuffle] Error: Correct answer text not found after shuffling. Defaulting to original index."
     );
     return { newChoices: choices, newCorrectIndex: correctIndex };
   }
@@ -423,7 +423,6 @@ export default function EcoRoamPage() {
     if (gameStatus !== 'question') {
         isProcessingHit.current = false;
     }
-    // Removed setIsPlayerHit(false) from here to control flash explicitly
 }, [gameStatus]);
 
 
@@ -475,7 +474,7 @@ export default function EcoRoamPage() {
 
       setMonsters(prevMonsters => prevMonsters.map(monster => {
         const angleToPlayer = Math.atan2(playerState.y - monster.y, playerState.x - monster.x);
-        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3);
+        const randomAngleOffset = (Math.random() - 0.5) * (Math.PI / 3); // Random movement offset
         const moveAngle = angleToPlayer + randomAngleOffset;
 
         let newMonsterX = monster.x + Math.cos(moveAngle) * MONSTER_SPEED;
@@ -491,7 +490,10 @@ export default function EcoRoamPage() {
         }
 
         if (updatedMonster.isPreparingToShoot && now >= updatedMonster.nextShotDecisionTime) {
-          const projectileAngle = Math.atan2(playerState.y - updatedMonster.y, playerState.x - updatedMonster.x);
+          const baseAngleToPlayer = Math.atan2(playerState.y - updatedMonster.y, playerState.x - updatedMonster.x);
+          const spreadOffset = (Math.random() - 0.5) * MONSTER_PROJECTILE_SPREAD_ANGLE;
+          const projectileAngle = baseAngleToPlayer + spreadOffset;
+
           setProjectiles(prevProj => [...prevProj, {
             id: `p-${Date.now()}-${Math.random()}`,
             monsterId: updatedMonster.id,
@@ -589,7 +591,7 @@ export default function EcoRoamPage() {
     console.log(`[HandleAnswer] Answer submitted. Correct: ${isCorrect}`);
 
     isProcessingHit.current = false;
-    // setIsPlayerHit(false); // Flash is turned off before modal, keep it off
+    setIsPlayerHit(false);
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -597,7 +599,6 @@ export default function EcoRoamPage() {
         if (monsterExists) {
             setMonstersKilled(killed => killed + 1);
         }
-        // Reset shot timers for all monsters
         return prev
           .filter(m => m.id !== currentQuestionContext.monsterId)
           .map(monster => ({ 
@@ -607,7 +608,7 @@ export default function EcoRoamPage() {
           }));
       });
       setScore(prev => prev + 50);
-      setProjectiles([]); // Clear monster projectiles
+      setProjectiles([]); 
       setCurrentQuestionContext(null);
       setGameStatus('playing');
       console.log("[HandleAnswer] Correct. Resuming game. Monster projectiles cleared.");
