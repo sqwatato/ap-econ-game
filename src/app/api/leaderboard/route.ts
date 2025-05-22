@@ -1,3 +1,4 @@
+
 // src/app/api/leaderboard/route.ts
 import { NextResponse } from 'next/server';
 import { kv } from '@vercel/kv';
@@ -9,7 +10,8 @@ const MAX_LEADERBOARD_ENTRIES = 100;
 async function readLeaderboard(): Promise<LeaderboardEntry[]> {
   try {
     const leaderboard = await kv.get<LeaderboardEntry[]>(LEADERBOARD_KEY);
-    return leaderboard || [];
+    // Ensure data is sorted and trimmed when read, as KV stores it as a blob
+    return leaderboard ? leaderboard.sort((a, b) => b.score - a.score).slice(0, MAX_LEADERBOARD_ENTRIES) : [];
   } catch (error) {
     console.error('Error reading leaderboard from KV:', error);
     return [];
@@ -61,6 +63,7 @@ export async function POST(request: Request) {
     leaderboard.push(newEntry);
     await writeLeaderboard(leaderboard);
     
+    // Return the updated (and sorted/trimmed by readLeaderboard) leaderboard
     const updatedLeaderboard = await readLeaderboard(); 
     return NextResponse.json(updatedLeaderboard, { status: 201 });
 
