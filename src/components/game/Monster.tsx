@@ -1,5 +1,6 @@
 // src/components/game/Monster.tsx
 import type React from 'react';
+import Image from 'next/image';
 import { MONSTER_SIZE, MonsterType } from '@/config/game';
 import type { MonsterInstance } from '@/types/game';
 import { cn } from '@/lib/utils';
@@ -9,19 +10,16 @@ interface MonsterProps {
 }
 
 const Monster: React.FC<MonsterProps> = ({ monster }) => {
-  const monsterBaseColor =
-    monster.type === MonsterType.TRIVIA ? 'bg-chart-1' : 'bg-chart-2';
-
-  // Conditional classes for charging up
-  const chargingClasses = monster.isPreparingToShoot 
-    ? 'bg-red-600/70 animate-shake ring-1 ring-red-400' // Red tint, shake, and ring
-    : monsterBaseColor;
+  const imageSrc =
+    monster.type === MonsterType.TRIVIA
+      ? '/monster-trivia.png'
+      : '/monster-cause-effect.png';
 
   return (
     <div
       className={cn(
-        'absolute rounded-sm shadow-md',
-        chargingClasses
+        'absolute pixelated', // Ensure the container also respects pixelation for children
+        monster.isPreparingToShoot ? 'animate-shake ring-2 ring-red-500 rounded-sm' : ''
       )}
       style={{
         left: `${monster.x}px`,
@@ -30,9 +28,19 @@ const Monster: React.FC<MonsterProps> = ({ monster }) => {
         height: `${MONSTER_SIZE}px`,
       }}
       aria-label={`Monster ${monster.type}${monster.isPreparingToShoot ? ' (charging)' : ''}`}
-    />
+    >
+      {monster.isPreparingToShoot && (
+        <div className="absolute inset-0 bg-red-600/50 rounded-sm z-10 pointer-events-none" /> // Red tint overlay
+      )}
+      <Image
+        src={imageSrc}
+        alt={`Monster ${monster.type}`}
+        width={MONSTER_SIZE}
+        height={MONSTER_SIZE}
+        className="rounded-sm shadow-md" // Image styling
+      />
+    </div>
   );
 };
 
 export default Monster;
-
