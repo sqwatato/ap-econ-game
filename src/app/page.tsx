@@ -32,7 +32,6 @@ type GameStatus = 'start_screen' | 'playing' | 'question' | 'game_over' | 'promp
 
 const MAX_QUESTION_QUEUE_SIZE = 2;
 const MIN_QUESTION_QUEUE_SIZE = 1;
-const USERNAME_STORAGE_KEY = 'ecoRoamUsername';
 
 const AP_MACRO_TOPICS = [
   "Basic Economic Concepts (Scarcity, Opportunity Cost, PPC)",
@@ -100,7 +99,11 @@ const ECONOMIC_CONDITIONS = [
     "liquidity trap",
     "rapid economic growth leading to resource scarcity",
     "unexpected decrease in consumer confidence",
-    "significant increase in oil prices affecting production costs"
+    "significant increase in oil prices affecting production costs",
+    "a decrease in net exports",
+    "an increase in autonomous consumption",
+    "a decrease in investment demand",
+    "a government budget surplus"
 ];
 
 
@@ -223,16 +226,16 @@ export default function EcoRoamPage() {
     setCauseEffectQuestionQueue([]);
     setIsFetchingTrivia(false);
     setIsFetchingCauseEffect(false);
-
-    // Fetch initial questions when game state is reset (usually on start game)
-    fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
-    fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
+    
+    if (gameStatusRef.current === 'playing' || gameStatusRef.current === 'start_screen') { // Only fetch if starting or restarting
+        fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
+        fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
+    }
 
     setTimeout(() => spawnMonster(Math.floor(MAX_MONSTERS / 2) || 1), 100);
   }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions]);
 
   const handleEndGameFlow = async (finalScore: number, finalTimeSurvived: number, finalMonstersKilled: number, failedQ?: GameOverData['failedQuestion']) => {
-    const storedUsername = localStorage.getItem(USERNAME_STORAGE_KEY);
     const currentGameOverData: GameOverData = {
         score: finalScore,
         timeSurvived: Math.floor(finalTimeSurvived * SCORE_INCREMENT_INTERVAL / 1000),
@@ -241,11 +244,8 @@ export default function EcoRoamPage() {
     };
     setGameOverData(currentGameOverData);
 
-    if (finalScore > 0 && !storedUsername) {
+    if (finalScore > 0) {
       setGameStatus('prompting_username');
-    } else if (finalScore > 0 && storedUsername) {
-      await submitScoreToLeaderboard(storedUsername, finalScore, currentGameOverData);
-      setGameStatus('game_over');
     } else {
       setGameStatus('game_over');
     }
@@ -271,7 +271,6 @@ export default function EcoRoamPage() {
   };
 
   const handleUsernameSubmit = async (name: string) => {
-    localStorage.setItem(USERNAME_STORAGE_KEY, name);
     if (gameOverData) {
       await submitScoreToLeaderboard(name, gameOverData.score, gameOverData);
     }
@@ -341,8 +340,6 @@ export default function EcoRoamPage() {
         handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "System Error: No question available.", correctAnswerText: "N/A"});
         isProcessingHit.current = false;
       }
-      // Note: isProcessingHit.current is reset in handleAnswer or if an error path is taken above.
-      // Game status remains 'question' until handleAnswer is called.
     }, 1000);
 
   }, [triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
@@ -351,15 +348,15 @@ export default function EcoRoamPage() {
     if (gameStatus !== 'question') {
         isProcessingHit.current = false;
     }
-    if (gameStatus === 'start_screen' || gameStatus === 'playing') {
+    if (gameStatus === 'playing' || gameStatus === 'start_screen' ) {
         setIsPlayerHit(false);
     }
 }, [gameStatus]);
 
 
   const startGame = () => {
-    resetGameState();
-    setGameStatus('playing');
+    setGameStatus('playing'); // Set status first
+    resetGameState(); // Then reset, which will trigger initial fetches if in 'playing' status
   };
 
   useEffect(() => {
