@@ -219,8 +219,12 @@ export default function EcoRoamPage() {
     setIsFetchingTrivia(false); 
     setIsFetchingCauseEffect(false);
     
+    // Fetch initial questions when game state is reset (usually on start game)
+    fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
+    fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
+
     setTimeout(() => spawnMonster(Math.floor(MAX_MONSTERS / 2) || 1), 100);
-  }, [spawnMonster]);
+  }, [spawnMonster, fetchTriviaQuestions, fetchCauseEffectQuestions]);
 
   const handleEndGameFlow = async (finalScore: number, finalTimeSurvived: number, finalMonstersKilled: number, failedQ?: GameOverData['failedQuestion']) => {
     const storedUsername = localStorage.getItem(USERNAME_STORAGE_KEY);
@@ -275,11 +279,11 @@ export default function EcoRoamPage() {
       return; 
     }
     isProcessingHit.current = true;
-    setIsPlayerHit(true); 
+    setIsPlayerHit(true); // Turn on red flash
     setGameStatus('question'); // Freeze game immediately
 
     setTimeout(async () => {
-      setIsPlayerHit(false); // Turn off red flash before showing question
+      setIsPlayerHit(false); // Turn off red flash right before showing question
 
       let questionData: BaseQuestionOutput | undefined;
       const monsterType = projectile.monsterType;
@@ -332,30 +336,24 @@ export default function EcoRoamPage() {
         handleEndGameFlow(score, timeSurvived, monstersKilled, { questionText: "System Error: No question available.", correctAnswerText: "N/A"});
         isProcessingHit.current = false; 
       }
+      // Note: isProcessingHit.current is reset in handleAnswer or if an error path is taken above.
+      // Game status remains 'question' until handleAnswer is called.
     }, 1000); 
 
   }, [gameStatus, triviaQuestionQueue, causeEffectQuestionQueue, score, timeSurvived, monstersKilled, fetchTriviaQuestions, fetchCauseEffectQuestions, isFetchingTrivia, isFetchingCauseEffect]);
 
   useEffect(() => {
-    // This effect manages clearing the 'isProcessingHit' flag and 'isPlayerHit'
-    // when the game status changes away from 'question' or 'game_over'.
     if (gameStatus !== 'question') {
         isProcessingHit.current = false; 
-        if (gameStatus !== 'prompting_username') { // Don't turn off if prompting
-            // setIsPlayerHit(false); // This is now handled more precisely within handleProjectileHit and handleAnswer
-        }
     }
     if (gameStatus === 'start_screen' || gameStatus === 'playing') {
-        setIsPlayerHit(false); // Ensure it's off if we restart or are just playing
+        setIsPlayerHit(false); 
     }
 }, [gameStatus]);
 
 
   const startGame = () => {
     resetGameState(); 
-    // Initial question fetching
-    fetchTriviaQuestions(MAX_QUESTION_QUEUE_SIZE);
-    fetchCauseEffectQuestions(MAX_QUESTION_QUEUE_SIZE);
     setGameStatus('playing');
   };
 
@@ -508,7 +506,7 @@ export default function EcoRoamPage() {
     if (!currentQuestionContext) return;
     
     isProcessingHit.current = false; 
-    setIsPlayerHit(false); // Turn off red flash if it was somehow still on
+    setIsPlayerHit(false); 
 
     if (isCorrect) {
       setMonsters(prev => {
@@ -567,15 +565,48 @@ export default function EcoRoamPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (Object.values(KEY_BINDINGS).includes(e.key.toLowerCase()) || Object.values(KEY_BINDINGS).includes(e.key.toUpperCase())) {
+      if (typeof e.key !== 'string') return; // Guard for undefined e.key
+
+      let canonicalKeyPressed: string | undefined = undefined;
+      const keyLower = e.key.toLowerCase();
+
+      for (const bindingValue of Object.values(KEY_BINDINGS)) {
+        if (bindingValue.length === 1 && bindingValue.toLowerCase() === keyLower) {
+          canonicalKeyPressed = bindingValue;
+          break;
+        }
+        if (bindingValue.length > 1 && bindingValue === e.key) {
+          canonicalKeyPressed = bindingValue;
+          break;
+        }
+      }
+
+      if (canonicalKeyPressed) {
         e.preventDefault();
-        pressedKeys.current.add(e.key.toLowerCase());
+        pressedKeys.current.add(canonicalKeyPressed);
       }
     };
+
     const handleKeyUp = (e: KeyboardEvent) => {
-       if (Object.values(KEY_BINDINGS).includes(e.key.toLowerCase()) || Object.values(KEY_BINDINGS).includes(e.key.toUpperCase())) {
+      if (typeof e.key !== 'string') return; // Guard for undefined e.key
+
+      let canonicalReleasedKey: string | undefined = undefined;
+      const keyLower = e.key.toLowerCase();
+
+      for (const bindingValue of Object.values(KEY_BINDINGS)) {
+        if (bindingValue.length === 1 && bindingValue.toLowerCase() === keyLower) {
+          canonicalReleasedKey = bindingValue;
+          break;
+        }
+        if (bindingValue.length > 1 && bindingValue === e.key) {
+          canonicalReleasedKey = bindingValue;
+          break;
+        }
+      }
+
+      if (canonicalReleasedKey) {
         e.preventDefault();
-        pressedKeys.current.delete(e.key.toLowerCase());
+        pressedKeys.current.delete(canonicalReleasedKey);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -711,3 +742,4 @@ export default function EcoRoamPage() {
     </main>
   );
 }
+
