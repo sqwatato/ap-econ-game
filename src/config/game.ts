@@ -14,7 +14,7 @@ export const INITIAL_MONSTER_SPAWN_BATCH_SIZE = 10; // Initial number of monster
 export const MONSTER_SPAWN_BATCH_INCREMENT = 2; // How many more monsters to add to each subsequent wave
 
 export const PROJECTILE_SIZE = 8; // Monster projectile size
-export const PROJECTILE_SPEED = 8; // Monster projectile speed
+export const PROJECTILE_SPEED = 12; // Monster projectile speed (was 8, increased by 50%)
 
 export const PLAYER_PROJECTILE_SIZE = 6;
 export const PLAYER_PROJECTILE_SPEED = 10.08; // Player projectile speed

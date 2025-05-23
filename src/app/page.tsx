@@ -479,8 +479,8 @@ export default function EcoRoamPage() {
 
   const startGame = () => {
     console.log("[StartGame] Starting game...");
-    setGameStatus('playing'); 
     resetGameState(); 
+    setGameStatus('playing'); 
   };
 
   useEffect(() => {
@@ -542,17 +542,35 @@ export default function EcoRoamPage() {
 
         if (updatedMonster.isPreparingToShoot && now >= updatedMonster.nextShotDecisionTime) {
           const baseAngleToPlayer = Math.atan2(playerState.y - updatedMonster.y, playerState.x - updatedMonster.x);
-          const spreadOffset = (Math.random() - 0.5) * MONSTER_PROJECTILE_SPREAD_ANGLE;
-          const projectileAngle = baseAngleToPlayer + spreadOffset;
+          
+          // Create two projectiles with different spreads
+          const spread1 = (Math.random() - 0.5) * MONSTER_PROJECTILE_SPREAD_ANGLE;
+          const spread2 = (Math.random() - 0.5) * MONSTER_PROJECTILE_SPREAD_ANGLE; // Can be the same, or make it distinct
+                                                                                     // e.g., ensure spread2 has a different sign or magnitude
 
-          setProjectiles(prevProj => [...prevProj, {
-            id: `p-${Date.now()}-${Math.random()}`,
-            monsterId: updatedMonster.id,
-            monsterType: updatedMonster.type,
-            x: updatedMonster.x + MONSTER_SIZE / 2,
-            y: updatedMonster.y + MONSTER_SIZE / 2,
-            angle: projectileAngle
-          }]);
+          const projectileAngle1 = baseAngleToPlayer + spread1;
+          const projectileAngle2 = baseAngleToPlayer + spread2;
+
+          const newProjectiles: ProjectileInstance[] = [
+            {
+              id: `p1-${Date.now()}-${Math.random()}`,
+              monsterId: updatedMonster.id,
+              monsterType: updatedMonster.type,
+              x: updatedMonster.x + MONSTER_SIZE / 2,
+              y: updatedMonster.y + MONSTER_SIZE / 2,
+              angle: projectileAngle1
+            },
+            {
+              id: `p2-${Date.now()}-${Math.random()}`,
+              monsterId: updatedMonster.id,
+              monsterType: updatedMonster.type,
+              x: updatedMonster.x + MONSTER_SIZE / 2,
+              y: updatedMonster.y + MONSTER_SIZE / 2,
+              angle: projectileAngle2
+            }
+          ];
+
+          setProjectiles(prevProj => [...prevProj, ...newProjectiles]);
           updatedMonster.isPreparingToShoot = false;
           updatedMonster.nextShotDecisionTime = now + (Math.random() * MONSTER_SHOOT_INTERVAL_RANDOM) + MONSTER_SHOOT_INTERVAL_BASE;
         }
